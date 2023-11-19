@@ -8,6 +8,7 @@
 #include <sstream>
 #include <chrono>
 #include <array>
+#include <set>
 
 int getIntegerAttribute(std::string _filename, std::string _attribute)
 {
@@ -105,26 +106,31 @@ std::vector<std::vector<cv::RotatedRect>> getDropletsFromVideo(cv::VideoCapture 
     return dropletEllipses;
 }
 
-void trackDroplet(std::vector<std::vector<cv::RotatedRect>> _droplets, int _width, int _height)
+std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>> getDisplacementVectors(std::vector<std::vector<cv::RotatedRect>> _droplets, int _width, int _height)
 {
+    std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>> result;
     for (size_t i = 0; i < _droplets.size() - 1; i++)
     {
+        std::cout << "Calculating displacement vectors for frame " << i << "\n";
         cv::Mat preview_image = cv::Mat::zeros(cv::Size(_width, _height), CV_8UC3);
+        std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> displacement_center;
+
         for(cv::RotatedRect ellipse : _droplets[i])
         {
-
             cv::ellipse(preview_image, ellipse, cv::Scalar (0, 255, 0), 2);
             cv::circle(preview_image, ellipse.center, 5, (0, 0, 255), -1);
 
             cv::Point curr_point = ellipse.center;
             std::vector<std::array<double, 3>> displacementVectors; // x-vector component, y-vector component, distance
-            for(cv::RotatedRect ellipse : _droplets[i+1])
+            for(cv::RotatedRect ellipse_next : _droplets[i+1])
             {
                 std::array<double, 3> displacement{0, 0};
-                displacement[0] = ellipse.center.x - curr_point.x;
-                displacement[1] = ellipse.center.y - curr_point.y;
-                displacement[2] = sqrt(pow(displacement[0], 2) + pow(displacement[1], 2));
-                displacementVectors.push_back(displacement);
+                if((ellipse_next.center.x - curr_point.x) > 0) { // Allow only positive displacement
+                    displacement[0] = ellipse_next.center.x - curr_point.x;
+                    displacement[1] = ellipse_next.center.y - curr_point.y;
+                    displacement[2] = sqrt(pow(displacement[0], 2) + pow(displacement[1], 2));
+                    displacementVectors.push_back(displacement);
+                }
             }
             if(!displacementVectors.empty())
             {
@@ -134,6 +140,7 @@ void trackDroplet(std::vector<std::vector<cv::RotatedRect>> _droplets, int _widt
                 displacedPoint.y = curr_point.y + displacementVectors.back()[1];
 
                 cv::line(preview_image, curr_point, displacedPoint, cv::Scalar(0, 0, 255), 1);
+                displacement_center.push_back({ellipse, displacementVectors.back()});
             }
 
         }
@@ -145,10 +152,52 @@ void trackDroplet(std::vector<std::vector<cv::RotatedRect>> _droplets, int _widt
             cv::circle(preview_image, ellipse.center, 5, (0, 0, 255), -1);
         }
 
-        cv::imshow("Frame", preview_image);
-        int keyboard = cv::waitKey(100);
-        if (keyboard == 'q' || keyboard == 27)
-            break;
+        //cv::imshow("Frame", preview_image);
+        //int keyboard = cv::waitKey(100);
+        //if (keyboard == 'q' || keyboard == 27)
+        //    break;
+        result.push_back(displacement_center);
+    }
+    return result;
+}
+
+void trackDroplet(std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>> _displacement_vectors, int skipframes=0)
+{
+    std::vector<std::vector<cv::Point_<float>>> droplet_tracks;
+    std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>>::iterator iter = _displacement_vectors.begin();
+    std::vector<cv::Point_<float>> visited;
+    std::advance(iter, skipframes);
+    int framenumber = 0;
+    while (iter != _displacement_vectors.end())
+    {
+        std::cout << "Tracking for frame " << framenumber << "\n";
+        for(std::tuple<cv::RotatedRect, std::array<double, 3>> displacement : *iter)
+        {
+            if(std::find(visited.begin(), visited.end(), std::get<0>(displacement).center) == visited.end())
+            {
+                std::vector<cv::Point_<float>> droplet_track;
+                droplet_track.push_back(std::get<0>(displacement).center);
+                std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>>::iterator next_iter =
+                        iter + 1;
+                while (!next_iter->empty() && next_iter != _displacement_vectors.end()) {
+                    for (std::tuple<cv::RotatedRect, std::array<double, 3>> displacement: *next_iter) {
+                        if (std::find(visited.begin(), visited.end(), std::get<0>(displacement).center) == visited.end())
+                        {
+                            int dx = droplet_track.back().x - std::get<0>(displacement).center.x;
+                            int dy = droplet_track.back().y - std::get<0>(displacement).center.y;
+                            if (dx == 0 && dy == 0) {
+                                droplet_track.push_back(std::get<0>(displacement).center);
+                                break;
+                            }
+                        }
+                    }
+                    std::advance(next_iter, 1);
+                }
+                droplet_tracks.push_back(droplet_track);
+                visited.insert(visited.end(), droplet_track.begin(), droplet_track.end());
+            }
+
+        }
     }
 }
 
@@ -184,7 +233,7 @@ std::vector<std::vector<double>> getVolumeFromEllipses(std::vector<std::vector<c
 
 int main() {
     std::cout << "Mpemba Video Analysis" << std::endl;
-    std::string videofile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/first_ice_ever_20231118_020835_20231118_021530.avi";
+    std::string videofile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/dropletvideo1.avi";
     std::string expfile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/export.exp";
 
     cv::VideoCapture capture(videofile);
@@ -197,9 +246,10 @@ int main() {
     int video_height = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
     std::cout << "Video with dimensions (w x h):" << video_width << "x" << video_height << std::endl;
 
-    std::vector<std::vector<cv::RotatedRect>> dropletEllipses = getDropletsFromVideo(capture, video_width, video_height,
-                                                                                     false);
-    trackDroplet(dropletEllipses, video_width, video_height);
+    std::vector<std::vector<cv::RotatedRect>> dropletEllipses = getDropletsFromVideo(capture, video_width, video_height,false);
+    std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>> displacement = getDisplacementVectors(dropletEllipses, video_width, video_height);
+    trackDroplet(displacement);
+
     std::vector<std::vector<double>> volumes = getVolumeFromEllipses(dropletEllipses);
 
     std::ofstream outfile("/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/out.csv");
