@@ -65,6 +65,8 @@ int main(int argc, char* argv[]) {
     config.calib = 1.0;
     config.skip_frames_volume = 10;
     config.x_threshold_count = 100;
+    config.show_frames_droplets = true;
+    config.skip_frames_droplets = 20;
     analyzer.configure(config);
     analyzer.analyze();
 

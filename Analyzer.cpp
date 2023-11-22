@@ -56,6 +56,9 @@ int Analyzer::getDropletsFromVideo()
     cv::Mat fgMask;
 
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+
+    double ellipse_area = 0.0;
+    int area_samples = 1;
     for(;;)
     {
         *capture >> frame_uncropped;
@@ -87,28 +90,40 @@ int Analyzer::getDropletsFromVideo()
             {
                 cv::RotatedRect ellipse = cv::fitEllipse(contour);
                 if(ellipse.size.height < video_height && ellipse.size.width < video_width)
+                {
+                    area_samples++;
+                    ellipse_area = ellipse_area*(area_samples-1)/area_samples + (ellipse.size.height*ellipse.size.width)/area_samples;
+                    std::cout << "Area average" << ellipse_area << "\n";
                     minEllipses.push_back(ellipse);
+                }
             }
 
         }
 
         if(config.show_frames_droplets)
         {
+            cv::Scalar blue = cv::Scalar(255, 0, 0);
+            cv::Scalar red = cv::Scalar (0, 0, 255);
+            if (frame_number < config.skip_frames_droplets)
+                cv::putText(frame, "Skipped", cv::Point(video_width/2-20, video_height/2), cv::FONT_HERSHEY_SIMPLEX, 3.0, red, 1);
+
             for(cv::RotatedRect ellipse : minEllipses)
             {
-                cv::Scalar blue = (255, 255, 255);
-                cv::Scalar red = (255, 0, 255);
+
                 cv::ellipse(frame, ellipse, blue, 2);
-                cv::circle(frame, ellipse.center, 5, red, -1);
+                cv::circle(frame, ellipse.center, 5, blue, -1);
 
             }
+            cv::Scalar green = (0, 0, 255);
+            cv::drawContours(frame, contours, -1, green);
             cv::imshow("Frame", frame);
             int keyboard = cv::waitKey(100);
             if (keyboard == 'q' || keyboard == 27)
                 break;
         }
 
-        droplet_ellipses.push_back(minEllipses);
+        if (frame_number >= config.skip_frames_droplets)
+            droplet_ellipses.push_back(minEllipses);
     }
     std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
     std::cout << "Time per frame:" << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() / (double)video_frame_count << "ms" << std::endl;
@@ -277,6 +292,7 @@ int Analyzer::configure(Analyzer::analysisConfig _conf)
 void Analyzer::printConfig(Analyzer::analysisConfig _conf)
 {
     std::string config_string = "show_frames_droplets=" + boolToString(_conf.show_frames_droplets) + "\n"
+                              + "skip_frames_droplets" + std::to_string(_conf.skip_frames_droplets) + "\n"
                               + "show_frames_displacement=" + boolToString(_conf.show_frames_displacement) + "\n"
                               + "max_movement_threshold_displacement=" + std::to_string(_conf.max_movement_threshold_displacement) + "\n"
                               + "show_frames_tracking=" + boolToString(_conf.show_frames_tracking) + "\n"

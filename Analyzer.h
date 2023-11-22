@@ -18,6 +18,7 @@ public:
     struct analysisConfig
     {
         bool show_frames_droplets = false;
+        int skip_frames_droplets = 0;
         bool show_frames_displacement = false;
         float max_movement_threshold_displacement = 1e4;
         bool show_frames_tracking = false;
