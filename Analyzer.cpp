@@ -6,6 +6,8 @@
 #include <iostream>
 #include <chrono>
 #include <sstream>
+#include <opencv2/bgsegm.hpp>
+#include <opencv2/intensity_transform.hpp>
 
 Analyzer::Analyzer(std::string _filename)
 {
@@ -51,7 +53,6 @@ int Analyzer::getDropletsFromVideo()
 {
     std::shared_ptr<cv::BackgroundSubtractor> pBackSub;
     pBackSub = cv::createBackgroundSubtractorKNN();
-
     cv::Mat frame_uncropped;
     cv::Mat fgMask;
 
@@ -71,13 +72,15 @@ int Analyzer::getDropletsFromVideo()
 
         cv::Mat frame = frame_uncropped(cv::Rect(0,0,video_width, video_height-20)); // Crop video
 
+        cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+
         pBackSub->apply(frame, fgMask); // Get foreground mask
 
         // Process mask
         cv::Mat mask_processed;
-        cv::threshold(fgMask, mask_processed, 3, 255, cv::THRESH_BINARY);
-        cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
-        cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 50)));
+        cv::threshold(fgMask, mask_processed, 2, 255, cv::THRESH_BINARY);
+        cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(10, 10)));
+        //cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 50)));
 
         // Find contours
         std::vector<std::vector<cv::Point>> contours;
@@ -102,6 +105,7 @@ int Analyzer::getDropletsFromVideo()
 
         if(config.show_frames_droplets)
         {
+            cv::cvtColor(frame, frame, cv::COLOR_GRAY2BGR);
             cv::Scalar blue = cv::Scalar(255, 0, 0);
             cv::Scalar red = cv::Scalar (0, 0, 255);
             if (frame_number < config.skip_frames_droplets)
@@ -117,7 +121,9 @@ int Analyzer::getDropletsFromVideo()
             cv::Scalar green = (0, 0, 255);
             cv::drawContours(frame, contours, -1, green);
             cv::imshow("Frame", frame);
-            int keyboard = cv::waitKey(100);
+            cv::imshow("Mask", fgMask);
+            cv::imshow("Mask Process", mask_processed);
+            int keyboard = cv::waitKey(200);
             if (keyboard == 'q' || keyboard == 27)
                 break;
         }

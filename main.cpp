@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
 
 
     std::cout << "Mpemba Video Analysis" << std::endl;
-    std::string videofile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/dropletvideo1.avi";
+    std::string videofile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/fc2_save_2_2023-11-23-184941-0000.avi";
 
     Analyzer analyzer(videofile);
     Analyzer::analysisConfig config;
