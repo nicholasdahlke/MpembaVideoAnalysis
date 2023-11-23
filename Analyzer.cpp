@@ -9,36 +9,38 @@
 #include <opencv2/bgsegm.hpp>
 #include <opencv2/intensity_transform.hpp>
 
-Analyzer::Analyzer(std::string _filename)
+Analyzer::Analyzer(std::string _filename_droplets, std::string _filename_background)
 {
-    if (_filename.empty())
+    if (_filename_droplets.empty() || _filename_background.empty())
     {
-        std::cerr << "Error:empty filename" << std::endl;
+        std::cerr << "Error:empty filename proviede" << std::endl;
     }
     else
     {
-        filename = _filename;
+        droplet_filename = _filename_droplets;
+        background_filename = _filename_background;
     }
 }
 
 int Analyzer::openCapture()
 {
-    if(filename.empty())
+    droplet_capture = new cv::VideoCapture(droplet_filename);
+    if(!droplet_capture->isOpened())
     {
-        std::cerr << "Error: Filename empty" << std::endl;
-        return -1;
-    }
-
-    capture = new cv::VideoCapture(filename);
-    if(!capture->isOpened())
-    {
-        std::cerr << "Error: Unable to open " << filename << std::endl;
+        std::cerr << "Error: Unable to open " << droplet_filename << std::endl;
         return -2;
     }
 
-    video_height = capture->get(cv::CAP_PROP_FRAME_HEIGHT);
-    video_width = capture->get(cv::CAP_PROP_FRAME_WIDTH);
-    video_frame_count = capture->get(cv::CAP_PROP_FRAME_COUNT);
+    background_capture = new cv::VideoCapture(background_filename);
+    if(!background_capture->isOpened())
+    {
+        std::cerr << "Error: Unable to open " << background_filename << std::endl;
+        return -2;
+    }
+
+    video_height = droplet_capture->get(cv::CAP_PROP_FRAME_HEIGHT);
+    video_width = droplet_capture->get(cv::CAP_PROP_FRAME_WIDTH);
+    video_frame_count = droplet_capture->get(cv::CAP_PROP_FRAME_COUNT);
     if(video_frame_count <= 0)
     {
         std::cerr << "Error: No frames found (Frame count is 0)" << std::endl;
@@ -51,8 +53,8 @@ int Analyzer::openCapture()
 
 int Analyzer::getDropletsFromVideo()
 {
-    std::shared_ptr<cv::BackgroundSubtractor> pBackSub;
-    pBackSub = cv::createBackgroundSubtractorKNN();
+    //std::shared_ptr<cv::BackgroundSubtractor> pBackSub;
+    //pBackSub = cv::createBackgroundSubtractorKNN();
     cv::Mat frame_uncropped;
     cv::Mat fgMask;
 
@@ -62,19 +64,20 @@ int Analyzer::getDropletsFromVideo()
     int area_samples = 1;
     for(;;)
     {
-        *capture >> frame_uncropped;
+        *droplet_capture >> frame_uncropped;
         if (frame_uncropped.empty())
             break;
 
-        int frame_number = capture->get(cv::CAP_PROP_POS_FRAMES);
+        int frame_number = droplet_capture->get(cv::CAP_PROP_POS_FRAMES);
         double progress = ((float)frame_number/(float)video_frame_count)*100;
         std::cout << "Processing progress is " << progress << "%\n";
 
-        cv::Mat frame = frame_uncropped(cv::Rect(0,0,video_width, video_height-20)); // Crop video
-
+        //cv::Mat frame = frame_uncropped(cv::Rect(0,0,video_width, video_height-20)); // Crop video
+        cv::Mat frame = frame_uncropped;
         cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
-        pBackSub->apply(frame, fgMask); // Get foreground mask
+        //pBackSub->apply(frame, fgMask); // Get foreground mask
+        fgMask = frame - *background_image;
 
         // Process mask
         cv::Mat mask_processed;
@@ -317,7 +320,7 @@ void Analyzer::printInfo()
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time), "%Y-%m-%d %X");
     std::string info_string = "time=" + ss.str() + "\n"
-                              + "file=" + filename + "\n"
+                              + "file=" + droplet_filename + "\n"
                               + "width=" + std::to_string(video_width) + "\n"
                               + "height=" + std::to_string(video_height) + "\n"
                               + "frames=" + std::to_string(video_frame_count) + "\n";
@@ -336,6 +339,10 @@ int Analyzer::analyze()
         int error_code = 0;
 
         error_code = openCapture();
+        if(error_code != 0)
+            return -1;
+
+        error_code = getBackground();
         if(error_code != 0)
             return -1;
 
@@ -386,4 +393,30 @@ const std::vector<double> Analyzer::getVolumes()
 int Analyzer::getNumDroplets()
 {
     return num_droplets;
+}
+
+int Analyzer::getBackground()
+{
+    cv::Mat current_frame;
+    cv::Mat averaged_frame;
+    int num_samples = 1;
+    std::cout << "Averaging for background" << std::endl;
+    *background_capture >> current_frame;
+    averaged_frame = current_frame;
+    for(;;)
+    {
+        *background_capture >> current_frame;
+        if (current_frame.empty())
+            break;
+        num_samples++;
+        int alpha = 1.0 / (num_samples + 1);
+        int beta = 1.0 - alpha;
+        cv::addWeighted(current_frame, alpha, averaged_frame, beta, 9, averaged_frame);
+        std::cout << "Current num of samples is " << num_samples << "\n";
+    }
+    std::cout << "Averaging finished, total num of samples is " << num_samples << std::endl;
+    background_image = new cv::Mat(averaged_frame);
+    cv::cvtColor(*background_image, *background_image, cv::COLOR_BGR2GRAY);
+    cv::imshow("Averaged frame", *background_image);
+    return 0;
 }

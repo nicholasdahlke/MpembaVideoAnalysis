@@ -56,8 +56,9 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Mpemba Video Analysis" << std::endl;
     std::string videofile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/fc2_save_2_2023-11-23-184941-0000.avi";
+    std::string back_file = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/background.avi";
 
-    Analyzer analyzer(videofile);
+    Analyzer analyzer(videofile, back_file);
     Analyzer::analysisConfig config;
     config.max_movement_threshold_displacement = 100;
     config.left_border_volume = 50;
