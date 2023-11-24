@@ -7,4 +7,4 @@ find_package(TBB REQUIRED)
 
 
 add_executable(MpembaVideoAnalysis main.cpp Calibrator.cpp Calibrator.h Analyzer.cpp Analyzer.h)
-target_link_libraries(MpembaVideoAnalysis ${OpenCV_LIBS} TBB::tbb)
+target_link_libraries(MpembaVideoAnalysis ${OpenCV_LIBS} TBB::tbb bgslibrary_core)

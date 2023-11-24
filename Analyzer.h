@@ -13,12 +13,12 @@
 
 class Analyzer {
 public:
-    Analyzer(std::string _filename_droplets, std::string _filename_background);
+    Analyzer(std::string _filename);
 
     struct analysisConfig
     {
         bool show_frames_droplets = false;
-        int skip_frames_droplets = 0;
+        bool skip_frames_droplets = 0;
         bool show_frames_displacement = false;
         float max_movement_threshold_displacement = 1e4;
         bool show_frames_tracking = false;
@@ -36,10 +36,8 @@ public:
     int getNumDroplets();
 
 private:
-    std::string droplet_filename;
-    std::string background_filename;
-    cv::VideoCapture * droplet_capture;
-    cv::VideoCapture * background_capture;
+    std::string filename;
+    cv::VideoCapture * capture;
     int video_width;
     int video_height;
     int video_frame_count;
@@ -47,7 +45,6 @@ private:
     bool configured = false;
 
     // Analysis results
-    cv::Mat * background_image;
     std::vector<std::vector<cv::RotatedRect>> droplet_ellipses;
     std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>> displacement_vectors;
     std::vector<std::vector<cv::Point_<float>>> droplet_tracks; // Untested
@@ -70,7 +67,6 @@ private:
     int getVolumeFromDroplets();
     double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
-    int getBackground();
 };
 
 

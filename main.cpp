@@ -2,6 +2,8 @@
 #include <fstream>
 #include "Calibrator.h"
 #include "Analyzer.h"
+#include <bgslibrary/algorithms/algorithms.h>
+#include <iterator>
 
 const char * params = "{ help h         |           | Print usage }"
                       "{ input          |           | Path to a video  }"
@@ -52,13 +54,11 @@ int main(int argc, char* argv[]) {
         parser.printMessage();
     }
 
-
-
     std::cout << "Mpemba Video Analysis" << std::endl;
+    std::cout << "Using OpenCV " << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << "." << CV_SUBMINOR_VERSION << std::endl;
     std::string videofile = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/fc2_save_2_2023-11-23-184941-0000.avi";
-    std::string back_file = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/background.avi";
 
-    Analyzer analyzer(videofile, back_file);
+    Analyzer analyzer(videofile);
     Analyzer::analysisConfig config;
     config.max_movement_threshold_displacement = 100;
     config.left_border_volume = 50;
