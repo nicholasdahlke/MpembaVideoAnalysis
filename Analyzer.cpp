@@ -52,7 +52,8 @@ int Analyzer::openCapture()
 int Analyzer::getDropletsFromVideo()
 {
     std::shared_ptr<cv::BackgroundSubtractor> pBackSub;
-    pBackSub = cv::createBackgroundSubtractorKNN(500, 400.0, false);
+    //pBackSub = cv::createBackgroundSubtractorKNN(100, 100.0, true);
+    pBackSub = cv::createBackgroundSubtractorMOG2(500, 16, true);
     cv::Mat frame_uncropped;
     cv::Mat fgMask;
 
@@ -70,19 +71,26 @@ int Analyzer::getDropletsFromVideo()
         double progress = ((float)frame_number/(float)video_frame_count)*100;
         std::cout << "Processing progress is " << progress << "%\n";
 
-        cv::Mat frame = frame_uncropped(cv::Rect(0,0,video_width, video_height-20)); // Crop video
+        cv::Mat frame = frame_uncropped(cv::Rect(0,0,video_width, video_height-0)); // Crop video
         cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+        cv::GaussianBlur(frame, frame, cv::Size(15, 15), 0);
         pBackSub->apply(frame, fgMask); // Get foreground mask
+        //cv::threshold(frame, fgMask, 160, 255, cv::THRESH_BINARY);
+        //cv::Rect floodfillrect;
+        //cv::Mat mask = cv::Mat::zeros(frame.rows+2, frame.cols+2, CV_8UC1);
+        //cv::floodFill(fgMask, mask,  cv::Point(video_height/2, video_width/2), cv::Scalar(100), &floodfillrect, cv::Scalar(0), cv::Scalar(100), 8);
 
         // Process mask
         cv::Mat mask_processed;
+
         cv::threshold(fgMask, mask_processed, 2, 255, cv::THRESH_BINARY);
-        cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
+        cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_DILATE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(10, 10)), cv::Point(-1, -1), 3);
         //cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 50)));
 
         // Find contours
         std::vector<std::vector<cv::Point>> contours;
         cv::findContours(mask_processed, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
+        cv::drawContours(mask_processed, contours, 0, 255, -1);
 
         std::vector<cv::RotatedRect> minEllipses;
         for(std::vector<cv::Point> contour : contours)
@@ -112,6 +120,8 @@ int Analyzer::getDropletsFromVideo()
             cv::Scalar red = cv::Scalar (0, 0, 255);
             cv::Scalar green = cv::Scalar (0, 255, 0);
 
+            //cv::rectangle(fgMask, floodfillrect, green);
+
             if (frame_number < config.skip_frames_droplets)
                 cv::putText(frame, "Skipped", cv::Point(video_width/2-20, video_height/2), cv::FONT_HERSHEY_SIMPLEX, 3.0, red, 1);
 
@@ -139,7 +149,7 @@ int Analyzer::getDropletsFromVideo()
             cv::imshow("Processing Overview", display_image);
             cv::setWindowProperty("Processing Overview", 1, cv::WINDOW_NORMAL);
 
-            int keyboard = cv::waitKey(200);
+            int keyboard = cv::waitKey(100);
             if (keyboard == 'q' || keyboard == 27)
                 break;
         }
