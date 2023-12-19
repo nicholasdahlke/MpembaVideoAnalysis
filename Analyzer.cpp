@@ -9,23 +9,30 @@
 #include <opencv2/bgsegm.hpp>
 #include <opencv2/intensity_transform.hpp>
 
-Analyzer::Analyzer(std::string _filename)
+Analyzer::Analyzer(const std::filesystem::path& _filename, const std::filesystem::path& _net_filename)
 {
-    if (_filename.empty())
+    log_file.open(_filename.parent_path().string() + "/" + _filename.stem().string() + ".log", std::fstream::out | std::fstream::app);
+    if (_filename.empty() || _net_filename.empty())
     {
         std::cerr << "Error:empty filename" << std::endl;
+        log_file << "Error:empty filename" << "\n";
     }
     else
     {
         filename = _filename;
+        dnn_net = cv::dnn::readNet(_net_filename);
     }
+    net_input_size = cv::Size(640.0, 640.0);
+    dnn_classes.emplace_back("droplets");
 }
+
 
 int Analyzer::openCapture()
 {
     if(filename.empty())
     {
         std::cerr << "Error: Filename empty" << std::endl;
+        log_file << "Error: Filename empty" << "\n";
         return -1;
     }
 
@@ -33,6 +40,7 @@ int Analyzer::openCapture()
     if(!capture->isOpened())
     {
         std::cerr << "Error: Unable to open " << filename << std::endl;
+        log_file << "Error: Unable to open " << filename << "\n";
         return -2;
     }
 
@@ -42,124 +50,90 @@ int Analyzer::openCapture()
     if(video_frame_count <= 0)
     {
         std::cerr << "Error: No frames found (Frame count is 0)" << std::endl;
+        log_file << "Error: No frames found (Frame count is 0)" << "\n";
         return -1;
     }
 
     std::cout << "Video with dimensions (w x h):" << video_width << "x" << video_height << std::endl;
+    log_file << "Video with dimensions (w x h):" << video_width << "x" << video_height << "\n";
+
     return 0;
 }
 
-int Analyzer::getDropletsFromVideo()
+int Analyzer::getDropletsFromVideo(int _num_droplets)
 {
-    std::shared_ptr<cv::BackgroundSubtractor> pBackSub;
-    //pBackSub = cv::createBackgroundSubtractorKNN(100, 100.0, true);
-    pBackSub = cv::createBackgroundSubtractorMOG2(500, 16, true);
-    cv::Mat frame_uncropped;
-    cv::Mat fgMask;
-
-    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-
-    double ellipse_area = 0.0;
-    int area_samples = 1;
-    for(;;)
+    capture->set(cv::CAP_PROP_POS_FRAMES, 0);
+    for (size_t i = 0; i < _num_droplets; i++)
     {
-        *capture >> frame_uncropped;
-        if (frame_uncropped.empty())
+        cv::Mat current_frame;
+        *capture >> current_frame;
+        if(current_frame.empty())
             break;
-
-        int frame_number = capture->get(cv::CAP_PROP_POS_FRAMES);
-        double progress = ((float)frame_number/(float)video_frame_count)*100;
-        std::cout << "Processing progress is " << progress << "%\n";
-
-        cv::Mat frame = frame_uncropped(cv::Rect(0,0,video_width, video_height-0)); // Crop video
-        cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
-        cv::GaussianBlur(frame, frame, cv::Size(15, 15), 0);
-        pBackSub->apply(frame, fgMask); // Get foreground mask
-        //cv::threshold(frame, fgMask, 160, 255, cv::THRESH_BINARY);
-        //cv::Rect floodfillrect;
-        //cv::Mat mask = cv::Mat::zeros(frame.rows+2, frame.cols+2, CV_8UC1);
-        //cv::floodFill(fgMask, mask,  cv::Point(video_height/2, video_width/2), cv::Scalar(100), &floodfillrect, cv::Scalar(0), cv::Scalar(100), 8);
-
-        // Process mask
-        cv::Mat mask_processed;
-
-        cv::threshold(fgMask, mask_processed, 2, 255, cv::THRESH_BINARY);
-        cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_DILATE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(10, 10)), cv::Point(-1, -1), 3);
-        //cv::morphologyEx(mask_processed, mask_processed, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(25, 50)));
-
-        // Find contours
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(mask_processed, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
-        cv::drawContours(mask_processed, contours, 0, 255, -1);
-
-        std::vector<cv::RotatedRect> minEllipses;
-        for(std::vector<cv::Point> contour : contours)
+        std::vector<cv::Mat> current_detections = dnn_results[i];
+        cv::Mat current_annotated = current_frame.clone();
+        std::vector<cv::Rect> detections = getBoundingRectFromResults(current_annotated, current_detections, dnn_classes);
+        cv::cvtColor(current_frame, current_frame, cv::COLOR_BGR2GRAY);
+        std::vector<Droplet> ellipses;
+        for (cv::Rect detection : detections)
         {
-            if (contour.size() > 5)
-            {
-                cv::RotatedRect ellipse = cv::fitEllipse(contour);
-                if(ellipse.size.height < video_height && ellipse.size.width < video_width)
-                {
-                    area_samples++;
-                    ellipse_area = ellipse_area*(area_samples-1)/area_samples + (ellipse.size.height*ellipse.size.width)/area_samples;
-                    std::cout << "Area average" << ellipse_area << "\n";
-                    minEllipses.push_back(ellipse);
-                }
+            if(detection.x < 0)
+                detection.x = 0;
+            if(detection.x + detection.width > video_width)
+                detection.width = detection.x + detection.width - video_width;
+            int x_offset = detection.x;
+            int y_offset = detection.y;
+            std::vector<std::vector<cv::Point>> contours;
+            cv::Mat droplet_roi = current_frame(detection);
+            cv::adaptiveThreshold(droplet_roi, droplet_roi, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 13, 2);
+            cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
+            cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
+            contours = filterContours(contours);
+            if(contours.size() == 2)
+            {//This case is executed if it is possible to fit an ellipse
+                std::vector<cv::Point> max_contour = contours.front();
+                if (cv::contourArea(contours.front()) < cv::contourArea(contours.back()))
+                    max_contour = contours.back();
+                std::vector<std::vector<cv::Point>> cont_vec;
+                cv::RotatedRect drop_ellipse = cv::fitEllipse(max_contour);
+                drop_ellipse.center.x += x_offset;
+                drop_ellipse.center.y += y_offset;
+                ellipses.push_back((Droplet){drop_ellipse, true});
             }
+            else
+            {
+                int width = detection.width;
+                int height = detection.height;
+                cv::Point center(x_offset + width/2, y_offset + height/2);
+                ellipses.push_back((Droplet){cv::RotatedRect(center, cv::Size(width, height), 0), false});
 
+            }
         }
-
         if(config.show_frames_droplets)
         {
-            cv::cvtColor(frame, frame, cv::COLOR_GRAY2BGR);
-            cv::cvtColor(fgMask, fgMask, cv::COLOR_GRAY2BGR);
-            cv::cvtColor(mask_processed, mask_processed, cv::COLOR_GRAY2BGR);
-
-
-            cv::Scalar blue = cv::Scalar(255, 0, 0);
-            cv::Scalar red = cv::Scalar (0, 0, 255);
-            cv::Scalar green = cv::Scalar (0, 255, 0);
-
-            //cv::rectangle(fgMask, floodfillrect, green);
-
-            if (frame_number < config.skip_frames_droplets)
-                cv::putText(frame, "Skipped", cv::Point(video_width/2-20, video_height/2), cv::FONT_HERSHEY_SIMPLEX, 3.0, red, 1);
-
-            for(cv::RotatedRect ellipse : minEllipses)
+            for(Droplet droplet : ellipses)
             {
-
-                cv::ellipse(frame, ellipse, blue, 2);
-                cv::circle(frame, ellipse.center, 5, blue, -1);
-
+                cv::Scalar color(0, 0, 255);
+                if(droplet.calculate_volume)
+                    color = cv::Scalar(0, 255, 0);
+                cv::ellipse(current_annotated, droplet.ellipse, color);
             }
-
-            cv::drawContours(frame, contours, -1, green);
-
-            cv::Mat display_image = cv::Mat::zeros(cv::Size(frame.cols, frame.rows + fgMask.rows + mask_processed.rows), CV_8UC3);
-            cv::Rect sub_roi = cv::Rect(0, 0, frame.cols, frame.rows);
-
-            frame.copyTo(display_image(sub_roi));
-
-            sub_roi.y = frame.rows;
-            fgMask.copyTo(display_image(sub_roi));
-
-            sub_roi.y = frame.rows + fgMask.rows;
-            mask_processed.copyTo(display_image(sub_roi));
-
-            cv::imshow("Processing Overview", display_image);
-            cv::setWindowProperty("Processing Overview", 1, cv::WINDOW_NORMAL);
-
-            int keyboard = cv::waitKey(100);
-            if (keyboard == 'q' || keyboard == 27)
-                break;
+            cv::imshow("Frames", current_annotated);
+            cv::waitKey(500);
         }
-
-        if (frame_number >= config.skip_frames_droplets)
-            droplet_ellipses.push_back(minEllipses);
+        droplet_ellipses.push_back(ellipses);
     }
-    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-    std::cout << "Time per frame:" << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() / (double)video_frame_count << "ms" << std::endl;
     return 0;
+}
+
+std::vector<std::vector<cv::Point>> Analyzer::filterContours(std::vector<std::vector<cv::Point>> _contours)
+{
+    std::vector<std::vector<cv::Point>> filtered_contours;
+    for (std::vector<cv::Point> contour : _contours)
+    {
+        if(contour.size() != 4)
+            filtered_contours.push_back(contour);
+    }
+    return filtered_contours;
 }
 
 int Analyzer::getDisplacementVectors()
@@ -167,45 +141,62 @@ int Analyzer::getDisplacementVectors()
     for (size_t i = 0; i < droplet_ellipses.size() - 1; i++)
     {
         std::cout << "Calculating displacement vectors for frame " << i << "\n";
+        log_file << "Calculating displacement vectors for frame " << i << "\n";
+
         cv::Mat preview_image = cv::Mat::zeros(cv::Size(video_width, video_height), CV_8UC3);
         std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> displacement_center;
 
-        for(cv::RotatedRect ellipse : droplet_ellipses[i])
+        for(Droplet droplet : droplet_ellipses[i])
         {
-            cv::ellipse(preview_image, ellipse, cv::Scalar (0, 255, 0), 2);
-            cv::circle(preview_image, ellipse.center, 5, (0, 0, 255), -1);
+            cv::ellipse(preview_image, droplet.ellipse, cv::Scalar (0, 255, 0), 2);
+            cv::circle(preview_image, droplet.ellipse.center, 5, (0, 0, 255), -1);
 
-            cv::Point curr_point = ellipse.center;
-            std::vector<std::array<double, 3>> displacementVectors; // x-vector component, y-vector component, distance
-            for(cv::RotatedRect ellipse_next : droplet_ellipses[i + 1])
+            cv::Point curr_point = droplet.ellipse.center;
+            if(curr_point.x > config.right_border_displacement)
             {
-                std::array<double, 3> displacement{0, 0};
-                if((ellipse_next.center.x - curr_point.x) > 0 && (ellipse_next.center.x - curr_point.x) < config.max_movement_threshold_displacement) { // Allow only positive displacement lower than the maximum allowed movement
-                    displacement[0] = ellipse_next.center.x - curr_point.x;
-                    displacement[1] = ellipse_next.center.y - curr_point.y;
-                    displacement[2] = sqrt(pow(displacement[0], 2) + pow(displacement[1], 2));
-                    displacementVectors.push_back(displacement);
-                }
+                std::cerr << "Droplet behind border, displacement calculation will most likely fail:SKIPPING" << std::endl;
+                log_file << "Droplet behind border, displacement calculation will most likely fail:SKIPPING" << "\n";
             }
-            if(!displacementVectors.empty())
+            else
             {
-                std::sort(displacementVectors.begin(), displacementVectors.end(), [&](std::array<double, 3> & a, std::array<double, 3> & b)->bool{return a[2]>b[2];});
-                cv::Point displacedPoint;
-                displacedPoint.x = curr_point.x + displacementVectors.back()[0];
-                displacedPoint.y = curr_point.y + displacementVectors.back()[1];
+                std::vector<std::array<double, 3>> displacementVectors; // x-vector component, y-vector component, distance
+                for(Droplet ellipse_next : droplet_ellipses[i + 1])
+                {
+                    std::array<double, 3> displacement{0, 0};
+                    if((ellipse_next.ellipse.center.x - curr_point.x) > 0 && (ellipse_next.ellipse.center.x - curr_point.x) < config.max_movement_threshold_displacement) { // Allow only positive displacement lower than the maximum allowed movement
+                        displacement[0] = ellipse_next.ellipse.center.x - curr_point.x;
+                        displacement[1] = ellipse_next.ellipse.center.y - curr_point.y;
+                        displacement[2] = sqrt(pow(displacement[0], 2) + pow(displacement[1], 2));
+                        displacementVectors.push_back(displacement);
+                    }
+                }
 
-                cv::line(preview_image, curr_point, displacedPoint, cv::Scalar(0, 0, 255), 1);
-                displacement_center.push_back({ellipse, displacementVectors.back()});
+                if(!displacementVectors.empty())
+                {
+                    std::sort(displacementVectors.begin(), displacementVectors.end(), [&](std::array<double, 3> & a, std::array<double, 3> & b)->bool{return a[2]>b[2];});
+                    cv::Point displacedPoint;
+                    displacedPoint.x = curr_point.x + displacementVectors.back()[0];
+                    displacedPoint.y = curr_point.y + displacementVectors.back()[1];
+
+                    cv::line(preview_image, curr_point, displacedPoint, cv::Scalar(0, 0, 255), 1);
+                    displacement_center.emplace_back(droplet.ellipse, displacementVectors.back());
+                }
+                else
+                {
+                    std::cerr << "Calculation of displacement vectors not possible for frame " << std::to_string(i) << std::endl;
+                    log_file << "Calculation of displacement vectors not possible for frame " << std::to_string(i) << "\n";
+
+                }
             }
 
         }
 
         if(config.show_frames_displacement)
         {
-            for(cv::RotatedRect ellipse : droplet_ellipses[i + 1])
+            for(Droplet droplet : droplet_ellipses[i + 1])
             {
-                cv::ellipse(preview_image, ellipse, cv::Scalar (255, 0, 0), 2);
-                cv::circle(preview_image, ellipse.center, 5, (0, 0, 255), -1);
+                cv::ellipse(preview_image, droplet.ellipse, cv::Scalar (255, 0, 0), 2);
+                cv::circle(preview_image, droplet.ellipse.center, 5, (0, 0, 255), -1);
             }
             cv::imshow("Frame", preview_image);
             int keyboard = cv::waitKey(100);
@@ -227,6 +218,8 @@ int Analyzer::trackDroplet()
     while (iter != displacement_vectors.end())
     {
         std::cout << "Tracking for frame " << frame_number << "\n";
+        log_file << "Tracking for frame " << frame_number << "\n";
+
         frame_number++;
         for(std::tuple<cv::RotatedRect, std::array<double, 3>> displacement : *iter)
         {
@@ -257,23 +250,24 @@ int Analyzer::trackDroplet()
         }
         std::advance(iter, 1);
     }
-    cv::Mat preview_image = cv::Mat::zeros(cv::Size(video_width, video_height), CV_8UC3);
     return 0;
 }
 
 int Analyzer::getVolumeFromDroplets()
 {
-    std::vector<std::vector<cv::RotatedRect>>::iterator frame_iter = droplet_ellipses.begin();
+    std::vector<std::vector<Droplet>>::iterator frame_iter = droplet_ellipses.begin();
     std::advance(frame_iter, config.skip_frames_volume);
     int framenumber = config.skip_frames_volume;
     while(frame_iter != droplet_ellipses.end())
     {
         std::cout << "Analyzing frame " << framenumber << " with " << frame_iter->size() << " droplets\n";
-        for(cv::RotatedRect droplet : *frame_iter)
+        log_file << "Analyzing frame " << framenumber << " with " << frame_iter->size() << " droplets\n";
+
+        for(Droplet droplet : *frame_iter)
         {
-            if (droplet.center.x > config.left_border_volume && droplet.center.x < config.right_border_volume)
+            if (droplet.ellipse.center.x > config.left_border_volume && droplet.ellipse.center.x < config.right_border_volume && droplet.calculate_volume)
             {
-                volumes.push_back(getVolumeFromDroplet(droplet, config.calib));
+                volumes.push_back(getVolumeFromDroplet(droplet.ellipse, config.calib));
             }
         }
         ++frame_iter;
@@ -324,8 +318,8 @@ int Analyzer::configure(Analyzer::analysisConfig _conf)
 void Analyzer::printConfig(Analyzer::analysisConfig _conf)
 {
     std::string config_string = "show_frames_droplets=" + boolToString(_conf.show_frames_droplets) + "\n"
-                              + "skip_frames_droplets" + std::to_string(_conf.skip_frames_droplets) + "\n"
                               + "show_frames_displacement=" + boolToString(_conf.show_frames_displacement) + "\n"
+                              + "right_border_displcement=" + std::to_string(_conf.right_border_displacement) + "\n"
                               + "max_movement_threshold_displacement=" + std::to_string(_conf.max_movement_threshold_displacement) + "\n"
                               + "show_frames_tracking=" + boolToString(_conf.show_frames_tracking) + "\n"
                               + "skip_frames_tracking=" + std::to_string(_conf.skip_frames_tracking) + "\n"
@@ -333,8 +327,13 @@ void Analyzer::printConfig(Analyzer::analysisConfig _conf)
                               + "left_border_volume=" + std::to_string(_conf.left_border_volume) + "\n"
                               + "right_border_volume=" + std::to_string(_conf.right_border_volume) + "\n"
                               + "x_threshold_count=" + std::to_string(_conf.x_threshold_count) + "\n"
-                              + "calib=" + std::to_string(_conf.calib) + "\n";
+                              + "calib=" + std::to_string(_conf.calib) + "\n"
+                              + "score_threshold=" + std::to_string(_conf.score_threshold) + "\n"
+                              + "nms_threshold=" + std::to_string(_conf.nms_threshold) + "\n"
+                              + "confidence_threshold" + std::to_string(_conf.confidence_threshold) + "\n";
+
     std::cout << config_string;
+    log_file << config_string;
 }
 
 void Analyzer::printInfo()
@@ -343,11 +342,12 @@ void Analyzer::printInfo()
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time), "%Y-%m-%d %X");
     std::string info_string = "time=" + ss.str() + "\n"
-                              + "file=" + filename + "\n"
+                              + "file=" + filename.string() + "\n"
                               + "width=" + std::to_string(video_width) + "\n"
                               + "height=" + std::to_string(video_height) + "\n"
                               + "frames=" + std::to_string(video_frame_count) + "\n";
     std::cout << info_string;
+    log_file << info_string;
     printConfig(config);
 }
 
@@ -355,17 +355,24 @@ inline std::string Analyzer::boolToString(bool b)
 {
     return b ? "Yes" : "No";
 }
+
 int Analyzer::analyze()
+{
+    return analyze(video_frame_count);
+}
+
+int Analyzer::analyze(int _num_droplets)
 {
     if (configured)
     {
         int error_code = 0;
 
-        error_code = openCapture();
         if(error_code != 0)
             return -1;
 
-        error_code = getDropletsFromVideo();
+        applyNetToFrames(_num_droplets);
+
+        error_code = getDropletsFromVideo(_num_droplets);
         if (error_code != 0)
             return -1;
 
@@ -381,15 +388,15 @@ int Analyzer::analyze()
         if(error_code != 0)
             return -1;
 
-        if(error_code != 0)
-        {
-            std::cerr << "Error: A processing error has occured" << std::endl;
-            return -2;
-        }
+        std::cout << "Analysis finished, writing results to file" << std::endl;
+        log_file << "Analysis finished, writing results to file" << "\n";
+        writeToFile(volumes, filename, "volumes", ".csv");
+        writeToFile(num_droplets, filename, "droplet_count", ".csv");
     }
     else
     {
         std::cerr << "Error: not configured" << std::endl;
+        log_file << "Error: not configured" << "\n";
         return -2;
     }
     return 0;
@@ -404,12 +411,181 @@ void Analyzer::clear()
     num_droplets = 0;
 }
 
-const std::vector<double> Analyzer::getVolumes()
-{
-    return volumes;
-}
-
 int Analyzer::getNumDroplets()
 {
     return num_droplets;
+}
+
+std::vector<cv::Mat> Analyzer::applyNetToFrame(cv::Mat _frame)
+{
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+
+    std::cout << "-----------------------\n" << "Generating blob\n";
+    log_file << "-----------------------\n" << "Generating blob\n";
+
+    cv::Mat blob;
+    blob = cv::dnn::blobFromImage(_frame, 1.0/255.0, net_input_size, cv::Scalar(0,0,0), true, false);
+    std::vector<cv::Mat> outputs;
+    dnn_net.setInput(blob);
+    dnn_net.forward(outputs, dnn_net.getUnconnectedOutLayersNames());
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::cout << "DNN Inference time:" << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() / (double)video_frame_count << "ms\n" << "-----------------------\n";
+    log_file << "DNN Inference time:" << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() / (double)video_frame_count << "ms\n" << "-----------------------\n";
+
+    return outputs;
+}
+
+
+
+void Analyzer::applyNetToFrames(int _num_droplets)
+{
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    int frame_number = 0;
+    for(size_t i = 0; i < _num_droplets; i++)
+    {
+        cv::Mat current_frame;
+        *capture >> current_frame;
+        if(current_frame.empty())
+            break;
+        dnn_results.push_back(applyNetToFrame(current_frame));
+        float progress = ((float)frame_number / (float)_num_droplets)*100.0;
+        frame_number++;
+        std::cout << "Read frame number " << std::to_string(frame_number) << " (progress is " << std::to_string(progress) << "%)\n";
+        log_file << "Read frame number " << std::to_string(frame_number) << " (progress is " << std::to_string(progress) << "%)\n";
+
+    }
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::cout << "Total DNN Inference time:" << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << "ms" << std::endl;
+    log_file << "Total DNN Inference time:" << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << "ms" << std::endl;
+
+}
+
+void Analyzer::drawLabel(cv::Mat& _input_image, std::string _label, int _left, int _top)
+{
+    // Display the _label at the _top of the bounding box.
+    int baseLine;
+    cv::Size label_size = cv::getTextSize(_label, cv::FONT_HERSHEY_SIMPLEX, 0.7, 1, &baseLine);
+    _top = std::max(_top, label_size.height);
+    // Top _left corner.
+    cv::Point tlc = cv::Point(_left, _top);
+    // Bottom right corner.
+    cv::Point brc = cv::Point(_left + label_size.width, _top + label_size.height + baseLine);
+    // Draw white rectangle.
+    cv::rectangle(_input_image, tlc, brc, cv::Scalar(0, 0, 0), cv::FILLED);
+    // Put the _label on the black rectangle.
+    cv::putText(_input_image, _label, cv::Point(_left, _top + label_size.height), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 1);
+}
+
+std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size)
+{
+    std::vector<int> class_ids;
+    std::vector<float> confidences;
+    std::vector<cv::Rect> boxes;
+
+    float x_factor = _annotation_image.cols / _size;
+    float y_factor = _annotation_image.rows / _size;
+    float *data = (float *)outputs[0].data;
+    const int rows = 25200;
+    const int dimensions = 6;
+
+    for (size_t i = 0; i < rows; ++i)
+    {
+        float confidence = data[4];
+        if(confidence >= config.confidence_threshold)
+        {
+            float * classes_score = data + 5;
+            cv::Mat scores(1, _class_name.size(), CV_32FC1, classes_score);
+            cv::Point class_id;
+            double max_class_score;
+            cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
+            if(max_class_score > config.score_threshold)
+            {
+                confidences.push_back(confidence);
+                class_ids.push_back(class_id.x);
+
+                float cx = data[0];
+                float cy = data[1];
+
+                float w = data[2];
+                float h = data[3];
+
+                int left = int((cx - 0.5 * w) * x_factor);
+                int top = int((cy - 0.5 * h) * y_factor);
+                int width = int(w * x_factor);
+                int height = int(h * y_factor);
+
+                boxes.push_back(cv::Rect(left, top, width, height));
+            }
+        }
+        data += dimensions;
+    }
+    std::vector<int> indices;
+    cv::dnn::NMSBoxes(boxes, confidences, config.score_threshold, config.nms_threshold, indices);
+    std::vector<cv::Rect> bounding_rects;
+    for (int i = 0; i < indices.size(); i++)
+    {
+        int idx = indices[i];
+        cv::Rect box = boxes[idx];
+        int left = box.x;
+        int top = box.y;
+        int width = box.width;
+        int height = box.height;
+        // Draw bounding box.
+        cv::Rect current_bounding_rect(cv::Point(left, top), cv::Point(left + width, top + height));
+        cv::rectangle(_annotation_image, current_bounding_rect, cv::Scalar(255, 0, 0), 3);
+        bounding_rects.push_back(current_bounding_rect);
+        // Get the label for the class name and its confidence.
+        std::string label = cv::format("%.2f", confidences[idx]);
+        label = _class_name[class_ids[idx]] + ":" + label;
+        // Draw class labels.
+        drawLabel(_annotation_image, label, left, top);
+    }
+    return bounding_rects;
+}
+void Analyzer::showAllMovementVectors()
+{
+    cv::RNG rng;
+    cv::Mat preview_image = cv::Mat::zeros(cv::Size(video_width, video_height), CV_8UC3);
+    for(std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> image_displ : displacement_vectors)
+    {
+        for (std::tuple<cv::RotatedRect, std::array<double, 3>> displ_vec : image_displ)
+        {
+            cv::Point curr_point = std::get<0>(displ_vec).center;
+            std::array<double, 3> displ_vec_array = std::get<1>(displ_vec);
+            cv::Point displaced_point;
+            displaced_point.x = curr_point.x + displ_vec_array[0];
+            int rand_shift = rng.uniform(-200,  200);
+            displaced_point.y = curr_point.y + displ_vec_array[1] + rand_shift;
+            curr_point.y = curr_point.y + rand_shift;
+            cv::line(preview_image, curr_point, displaced_point, cv::Scalar(rng.uniform(0,255), rng.uniform(0,rng.uniform(0,255)), 255), 1);
+        }
+    }
+    cv::imshow("Disp Vectors", preview_image);
+    cv::waitKey();
+}
+
+Analyzer::~Analyzer()
+{
+    log_file.close();
+    capture->release();
+}
+
+template <typename T>
+void Analyzer::writeToFile(std::vector<T> _vec, std::filesystem::path _filename, std::string _type, std::string _extension)
+{
+    std::filesystem::path filepath = _filename.parent_path().string() + "/" + _filename.stem().string() + "-" + _type + _extension;
+    std::ofstream outfile(filepath);
+    for (size_t i = 0; i < _vec.size(); ++i) {
+        outfile << i << ";" << _vec[i] << "\n";
+    }
+    outfile.close();
+}
+
+template <typename T>
+void Analyzer::writeToFile(T _elem, std::filesystem::path _filename, std::string _type, std::string _extension)
+{
+    std::filesystem::path filepath = _filename.parent_path().string() + "/" + _filename.stem().string() + "-" + _type + _extension;
+    std::ofstream outfile(filepath);
+    outfile << 0 << ";" << _elem << "\n";
+    outfile.close();
 }

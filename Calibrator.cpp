@@ -20,7 +20,7 @@ Calibrator::Calibrator(cv::VideoCapture _video, int _frame)
     rect_translation_y = frame_height/2;
     preview_image_original = preview_image_current.clone();
     std::string window_name = "Calibration Frame";
-    cv::namedWindow(window_name);
+    cv::namedWindow(window_name, cv::WINDOW_NORMAL);
     cv::createTrackbar("Rotation", window_name, NULL, 360, rotation_tr_callback,this);
     cv::createTrackbar("Translation: y", window_name, NULL, frame_height, translation_y_tr_callback, this);
     cv::createTrackbar("Height", window_name, NULL, frame_height, height_tr_callback, this);
@@ -34,6 +34,7 @@ Calibrator::Calibrator(cv::VideoCapture _video, int _frame)
             break;
         }
     }
+    cv::destroyWindow(window_name);
 }
 
 void Calibrator::rotation_tr_callback(int value, void *data)
@@ -76,7 +77,7 @@ void Calibrator::redrawImage()
         tubeRect.points(vertices);
         for(size_t i = 0; i<4; i++)
         {
-            cv::line(preview_image_current, vertices[i], vertices[(i+1)%4], cv::Scalar(0, 139, 237));
+            cv::line(preview_image_current, vertices[i], vertices[(i+1)%4], cv::Scalar(0, 139, 237),2);
         }
     }
 }

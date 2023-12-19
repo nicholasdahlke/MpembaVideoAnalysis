@@ -7,8 +7,7 @@ data = np.genfromtxt(filename, delimiter=';')
 
 volumes = data[:,1]
 volumes = volumes#[volumes<0.5e6]
-volume = stats.mode(volumes)
+volume = np.median(volumes)
 print("Droplet volume is" + str(volume))
 plt.hist(volumes, bins=1000)
-#plt.vlines(volume, 0, plt.ylim())
 plt.show()
