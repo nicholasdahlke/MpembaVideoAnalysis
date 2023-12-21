@@ -7,6 +7,7 @@
 #include <chrono>
 #include <sstream>
 #include <opencv2/bgsegm.hpp>
+#include <cmath>
 #include <opencv2/intensity_transform.hpp>
 
 Analyzer::Analyzer(const std::filesystem::path& _filename, const std::filesystem::path& _net_filename)
@@ -76,27 +77,50 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
         std::vector<Droplet> ellipses;
         for (cv::Rect detection : detections)
         {
+            detection = enlargeRect(detection, 1.2); //Enlarge rectangle to avoid problematic collisions with borders
+            cv::rectangle(current_annotated, detection, cv::Scalar(0, 255, 0), 2);
+            bool skip_droplet = false;
             if(detection.x < 0)
-                detection.x = 0;
+                skip_droplet = true;
+            if(detection.y < 0)
+                skip_droplet = true;
             if(detection.x + detection.width > video_width)
-                detection.width = detection.x + detection.width - video_width;
+                skip_droplet = true;
+            if(detection.y + detection.height > video_height)
+                skip_droplet = true;
             int x_offset = detection.x;
             int y_offset = detection.y;
+            std::cout << "ROI x" << std::to_string(detection.x) << "\n";
+            std::cout << "ROI y" << std::to_string(detection.y) << "\n";
             std::vector<std::vector<cv::Point>> contours;
-            cv::Mat droplet_roi = current_frame(detection);
-            cv::adaptiveThreshold(droplet_roi, droplet_roi, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 13, 2);
-            cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
-            cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
-            contours = filterContours(contours);
-            if(contours.size() == 2)
+            if(!skip_droplet)
+            {
+                cv::Mat droplet_roi = current_frame(detection);
+                cv::adaptiveThreshold(droplet_roi, droplet_roi, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 21, 2);
+                cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
+                cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
+                double max_drop_area = std::numbers::pi * detection.height * detection.width * 1.2;
+                contours = filterContours(contours, max_drop_area);
+                // Shift contours
+                for(std::vector<cv::Point>& contour: contours)
+                {
+                    for(cv::Point& point : contour)
+                    {
+                        point.x += x_offset;
+                        point.y += y_offset;
+                    }
+                }
+                cv::drawContours(current_annotated, contours, -1, cv::Scalar(255, 125, 0));
+            }
+            if(contours.size() == 2 && !skip_droplet)
             {//This case is executed if it is possible to fit an ellipse
                 std::vector<cv::Point> max_contour = contours.front();
                 if (cv::contourArea(contours.front()) < cv::contourArea(contours.back()))
                     max_contour = contours.back();
                 std::vector<std::vector<cv::Point>> cont_vec;
                 cv::RotatedRect drop_ellipse = cv::fitEllipse(max_contour);
-                drop_ellipse.center.x += x_offset;
-                drop_ellipse.center.y += y_offset;
+                //drop_ellipse.center.x += x_offset;
+                //drop_ellipse.center.y += y_offset;
                 ellipses.push_back((Droplet){drop_ellipse, true});
             }
             else
@@ -117,6 +141,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                     color = cv::Scalar(0, 255, 0);
                 cv::ellipse(current_annotated, droplet.ellipse, color);
             }
+            std::cout << "Frame end\n\n";
             cv::imshow("Frames", current_annotated);
             cv::waitKey(500);
         }
@@ -125,13 +150,27 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
     return 0;
 }
 
-std::vector<std::vector<cv::Point>> Analyzer::filterContours(std::vector<std::vector<cv::Point>> _contours)
+std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area)
 {
     std::vector<std::vector<cv::Point>> filtered_contours;
-    for (std::vector<cv::Point> contour : _contours)
+    std::vector<double> contour_areas;
+    for (const std::vector<cv::Point>& contour : _contours)
     {
         if(contour.size() != 4)
+        {
             filtered_contours.push_back(contour);
+            contour_areas.push_back(cv::contourArea(contour));
+        }
+    }
+    double contour_median_lower = 0.1 * getMedian(contour_areas);
+    std::vector<std::vector<cv::Point>>::iterator contour_it;
+    for(contour_it = filtered_contours.begin(); contour_it != filtered_contours.end();)
+    {
+        double contour_area = cv::contourArea(*contour_it);
+        if(contour_area < contour_median_lower || contour_area > _max_area)
+            contour_it = filtered_contours.erase(contour_it);
+        else
+            ++contour_it;
     }
     return filtered_contours;
 }
@@ -211,7 +250,7 @@ int Analyzer::getDisplacementVectors()
 int Analyzer::trackDroplet()
 {
 
-    std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>>::iterator iter = displacement_vectors.begin();
+    auto iter = displacement_vectors.begin();
     std::vector<cv::Point_<float>> visited;
     std::advance(iter, config.skip_frames_tracking);
     int frame_number = 0;
@@ -227,7 +266,7 @@ int Analyzer::trackDroplet()
             {
                 std::vector<cv::Point_<float>> droplet_track;
                 droplet_track.push_back(std::get<0>(displacement).center);
-                std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>>::iterator next_iter =
+                auto next_iter =
                         iter + 1;
                 while (!next_iter->empty() && next_iter != displacement_vectors.end()) {
                     for (std::tuple<cv::RotatedRect, std::array<double, 3>> displacement_next: *next_iter) {
@@ -255,7 +294,7 @@ int Analyzer::trackDroplet()
 
 int Analyzer::getVolumeFromDroplets()
 {
-    std::vector<std::vector<Droplet>>::iterator frame_iter = droplet_ellipses.begin();
+    auto frame_iter = droplet_ellipses.begin();
     std::advance(frame_iter, config.skip_frames_volume);
     int framenumber = config.skip_frames_volume;
     while(frame_iter != droplet_ellipses.end())
@@ -290,7 +329,7 @@ double Analyzer::getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib)
 int Analyzer::countDroplets()
 {
     std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> total_displacements;
-    for(std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> a : displacement_vectors)
+    for(const std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>& a : displacement_vectors)
     {
         for(std::tuple<cv::RotatedRect, std::array<double, 3>> b : a)
         {
@@ -411,12 +450,12 @@ void Analyzer::clear()
     num_droplets = 0;
 }
 
-int Analyzer::getNumDroplets()
+int Analyzer::getNumDroplets() const
 {
     return num_droplets;
 }
 
-std::vector<cv::Mat> Analyzer::applyNetToFrame(cv::Mat _frame)
+std::vector<cv::Mat> Analyzer::applyNetToFrame(const cv::Mat& _frame)
 {
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 
@@ -460,7 +499,7 @@ void Analyzer::applyNetToFrames(int _num_droplets)
 
 }
 
-void Analyzer::drawLabel(cv::Mat& _input_image, std::string _label, int _left, int _top)
+void Analyzer::drawLabel(cv::Mat& _input_image, const std::string& _label, int _left, int _top)
 {
     // Display the _label at the _top of the bounding box.
     int baseLine;
@@ -476,7 +515,7 @@ void Analyzer::drawLabel(cv::Mat& _input_image, std::string _label, int _left, i
     cv::putText(_input_image, _label, cv::Point(_left, _top + label_size.height), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 1);
 }
 
-std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size)
+std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size) const
 {
     std::vector<int> class_ids;
     std::vector<float> confidences;
@@ -514,7 +553,7 @@ std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation
                 int width = int(w * x_factor);
                 int height = int(h * y_factor);
 
-                boxes.push_back(cv::Rect(left, top, width, height));
+                boxes.push_back(cv::Rect(cv::Point(left, top), cv::Point(left + width, top + height)));
             }
         }
         data += dimensions;
@@ -528,12 +567,10 @@ std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation
         cv::Rect box = boxes[idx];
         int left = box.x;
         int top = box.y;
-        int width = box.width;
-        int height = box.height;
-        // Draw bounding box.
-        cv::Rect current_bounding_rect(cv::Point(left, top), cv::Point(left + width, top + height));
-        cv::rectangle(_annotation_image, current_bounding_rect, cv::Scalar(255, 0, 0), 3);
-        bounding_rects.push_back(current_bounding_rect);
+
+        //cv::Rect current_bounding_rect = box;
+        cv::rectangle(_annotation_image, box, cv::Scalar(255, 0, 0), 3);
+        bounding_rects.push_back(box);
         // Get the label for the class name and its confidence.
         std::string label = cv::format("%.2f", confidences[idx]);
         label = _class_name[class_ids[idx]] + ":" + label;
@@ -588,4 +625,37 @@ void Analyzer::writeToFile(T _elem, std::filesystem::path _filename, std::string
     std::ofstream outfile(filepath);
     outfile << 0 << ";" << _elem << "\n";
     outfile.close();
+}
+
+template <typename T>
+T Analyzer::getMedian(std::vector<T> a)
+{
+    size_t n = a.size();
+    if (n % 2 == 0)
+    {
+        std::nth_element(a.begin(), a.begin() + n / 2, a.end());
+        std::nth_element(a.begin(), a.begin() + (n - 1)/2, a.end());
+        return (T)(a[(n-1)/2] + a[n/2]) / 2.0;
+    }
+    else
+    {
+        std::nth_element(a.begin(), a.begin() + n/2, a.end());
+        return (T)a[n/2];
+    }
+}
+
+cv::Rect Analyzer::enlargeRect(cv::Rect _rect, double _factor)
+{
+    if(_factor < 0)
+    {
+        std::cerr << "Error:Something wrong with rectangle scaling factor\n";
+        log_file << "Error:Something wrong with rectangle scaling factor\n";
+    }
+    int pre_width = _rect.width;
+    int pre_height = _rect.height;
+    _rect.width *= _factor;
+    _rect.height *= _factor;
+    _rect.x -= (_rect.width-pre_width)/2;
+    _rect.y -= (_rect.height-pre_height)/2;
+    return _rect;
 }

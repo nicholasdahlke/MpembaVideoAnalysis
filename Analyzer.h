@@ -45,7 +45,7 @@ public:
     int configure(analysisConfig _conf);
     int analyze();
     int analyze(int _num_droplets);
-    int getNumDroplets();
+    int getNumDroplets() const;
     int openCapture();
 
 
@@ -76,16 +76,19 @@ private:
     void printConfig(Analyzer::analysisConfig _conf);
     void printInfo();
     void clear();
-    inline std::string boolToString(bool b);
-    std::vector<cv::Mat> applyNetToFrame(cv::Mat _frame);
+    static inline std::string boolToString(bool b);
+    std::vector<cv::Mat> applyNetToFrame(const cv::Mat& _frame);
     void applyNetToFrames(int _num_droplets);
-    void drawLabel(cv::Mat& _input_image, std::string _label, int _left, int _top);
-    std::vector<cv::Rect> getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size= 640);
+    static void drawLabel(cv::Mat& _input_image, const std::string& _label, int _left, int _top);
+    std::vector<cv::Rect> getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size= 640) const;
     void showAllMovementVectors();
     template <typename T>
     void writeToFile(std::vector<T> _vec, std::filesystem::path _filename, std::string _type, std::string _extension);
     template <typename T>
     void writeToFile(T _elem, std::filesystem::path _filename, std::string _type, std::string _extension);
+    template <typename T>
+    T getMedian(std::vector<T> a);
+    cv::Rect enlargeRect(cv::Rect _rect, double _factor);
 
 
 
@@ -94,9 +97,9 @@ private:
     int getDisplacementVectors();
     int trackDroplet(); // Untested
     int getVolumeFromDroplets();
-    double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
+    static double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
-    std::vector<std::vector<cv::Point>> filterContours(std::vector<std::vector<cv::Point>> _contours);
+    std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area);
 };
 
 

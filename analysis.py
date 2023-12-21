@@ -2,12 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
 
-filename = "/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/videos/volumes.csv"
+filename = "/home/nicholas/Mpempa Videos/1000Ul Oel 14Ul Wasser 47.81 Fps 2-volumes.csv"
 data = np.genfromtxt(filename, delimiter=';')
 
 volumes = data[:,1]
-volumes = volumes#[volumes<0.5e6]
-volume = np.median(volumes)
-print("Droplet volume is" + str(volume))
-plt.hist(volumes, bins=1000)
+volumes = volumes * 1000 # Convert to liters
+volumes = volumes * 1e6 # Convert to microliters
+median_volume = np.median(volumes)
+std_dev_volume = np.std(volumes)
+print("Median is" + str(median_volume))
+print("Standard Deviation:" + str(std_dev_volume))
+plt.hist(volumes, bins=20, range=[0, 0.1])
+plt.figure()
+plt.boxplot(volumes)
 plt.show()
