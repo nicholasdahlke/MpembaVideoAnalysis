@@ -364,23 +364,25 @@ int Analyzer::configure(Analyzer::analysisConfig _conf)
 
 void Analyzer::printConfig(Analyzer::analysisConfig _conf)
 {
-    std::string config_string = "show_frames_droplets=" + boolToString(_conf.show_frames_droplets) + "\n"
-                              + "show_frames_displacement=" + boolToString(_conf.show_frames_displacement) + "\n"
-                              + "right_border_displcement=" + std::to_string(_conf.right_border_displacement) + "\n"
-                              + "max_movement_threshold_displacement=" + std::to_string(_conf.max_movement_threshold_displacement) + "\n"
-                              + "show_frames_tracking=" + boolToString(_conf.show_frames_tracking) + "\n"
-                              + "skip_frames_tracking=" + std::to_string(_conf.skip_frames_tracking) + "\n"
-                              + "skip_frames_volume=" + std::to_string(_conf.skip_frames_volume) + "\n"
-                              + "left_border_volume=" + std::to_string(_conf.left_border_volume) + "\n"
-                              + "right_border_volume=" + std::to_string(_conf.right_border_volume) + "\n"
-                              + "x_threshold_count=" + std::to_string(_conf.x_threshold_count) + "\n"
-                              + "calib=" + std::to_string(_conf.calib) + "\n"
-                              + "score_threshold=" + std::to_string(_conf.score_threshold) + "\n"
-                              + "nms_threshold=" + std::to_string(_conf.nms_threshold) + "\n"
-                              + "confidence_threshold" + std::to_string(_conf.confidence_threshold) + "\n";
+    std::stringstream info_stream;
+    info_stream << std::scientific;
+    info_stream << "show_frames_droplets=" + boolToString(_conf.show_frames_droplets) + "\n";
+    info_stream << "show_frames_displacement=" + boolToString(_conf.show_frames_displacement) + "\n";
+    info_stream << "right_border_displacement=" << _conf.right_border_displacement << "\n";
+    info_stream << "max_movement_threshold_displacement=" << _conf.max_movement_threshold_displacement << "\n";
+    info_stream << "show_frames_tracking=" + boolToString(_conf.show_frames_tracking) + "\n";
+    info_stream << "skip_frames_tracking=" << _conf.skip_frames_tracking <<  "\n";
+    info_stream << "skip_frames_volume=" << _conf.skip_frames_volume << "\n";
+    info_stream << "left_border_volume=" << _conf.left_border_volume << "\n";
+    info_stream << "right_border_volume=" << _conf.right_border_volume << "\n";
+    info_stream << "x_threshold_count=" << _conf.x_threshold_count << "\n";
+    info_stream <<  "calib=" << _conf.calib << "\n";
+    info_stream << "score_threshold=" << _conf.score_threshold << "\n";
+    info_stream << "nms_threshold=" << _conf.nms_threshold << "\n";
+    info_stream << "confidence_threshold" << _conf.confidence_threshold << "\n";
 
-    std::cout << config_string;
-    log_file << config_string;
+    std::cout << info_stream.str();
+    log_file << info_stream.str();
 }
 
 void Analyzer::printInfo()

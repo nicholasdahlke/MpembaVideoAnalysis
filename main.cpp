@@ -39,7 +39,6 @@ int main(int argc, char* argv[]) {
         calib_constant = calib.getCalibrationConstant();
         video_cap_calib.release();
     }
-    std::cout << "Calibration constant:" << calib_constant << std::endl;
     Analyzer analyzer(videofile, netfile);
     Analyzer::analysisConfig config;
     config.max_movement_threshold_displacement = 10000;
@@ -54,10 +53,12 @@ int main(int argc, char* argv[]) {
     config.confidence_threshold = 0.7;
     analyzer.openCapture();
     analyzer.configure(config);
-    int return_code = analyzer.analyze(50);
+    int return_code = analyzer.analyze();
 
     int count = analyzer.getNumDroplets();
     std::cout << "Counted " << count << " droplets" << std::endl;
+    std::cout << std::scientific <<  "Calibration constant:" << calib_constant << std::endl;
+
 
     return return_code;
 }
