@@ -13,6 +13,8 @@
 Analyzer::Analyzer(const std::filesystem::path& _filename, const std::filesystem::path& _net_filename)
 {
     log_file.open(_filename.parent_path().string() + "/" + _filename.stem().string() + ".log", std::fstream::out | std::fstream::app);
+    volume_images_path = _filename.parent_path().string() + "/" + _filename.stem().string() + "-volume-images/";
+    std::filesystem::create_directories(volume_images_path);
     if (_filename.empty() || _net_filename.empty())
     {
         std::cerr << "Error:empty filename" << std::endl;
@@ -25,6 +27,7 @@ Analyzer::Analyzer(const std::filesystem::path& _filename, const std::filesystem
     }
     net_input_size = cv::Size(640.0, 640.0);
     dnn_classes.emplace_back("droplets");
+
 }
 
 
@@ -64,6 +67,7 @@ int Analyzer::openCapture()
 int Analyzer::getDropletsFromVideo(int _num_droplets)
 {
     capture->set(cv::CAP_PROP_POS_FRAMES, 0);
+    int volume_image_nr = 0;
     for (size_t i = 0; i < _num_droplets; i++)
     {
         cv::Mat current_frame;
@@ -75,6 +79,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
         std::vector<cv::Rect> detections = getBoundingRectFromResults(current_annotated, current_detections, dnn_classes);
         cv::cvtColor(current_frame, current_frame, cv::COLOR_BGR2GRAY);
         std::vector<Droplet> ellipses;
+        int volume_droplet_nr = 0;
         for (cv::Rect detection : detections)
         {
             detection = enlargeRect(detection, 1.2); //Enlarge rectangle to avoid problematic collisions with borders
@@ -119,9 +124,11 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                     max_contour = contours.back();
                 std::vector<std::vector<cv::Point>> cont_vec;
                 cv::RotatedRect drop_ellipse = cv::fitEllipse(max_contour);
-                //drop_ellipse.center.x += x_offset;
-                //drop_ellipse.center.y += y_offset;
                 ellipses.push_back((Droplet){drop_ellipse, true});
+                cv::Mat temp_annot = current_annotated.clone();
+                cv::ellipse(temp_annot, drop_ellipse, cv::Scalar(0, 255, 255));
+                cv::imwrite(volume_images_path.string() + "droplet_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", temp_annot(detection));
+                volume_droplet_nr++;
             }
             else
             {
@@ -146,6 +153,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
             cv::waitKey(500);
         }
         droplet_ellipses.push_back(ellipses);
+        volume_image_nr++;
     }
     return 0;
 }

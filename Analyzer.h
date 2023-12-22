@@ -51,10 +51,10 @@ public:
 
 private:
     std::filesystem::path filename;
-    cv::VideoCapture * capture;
-    int video_width;
-    int video_height;
-    int video_frame_count;
+    cv::VideoCapture * capture{};
+    int video_width{};
+    int video_height{};
+    int video_frame_count{};
     analysisConfig config;
     bool configured = false;
     cv::dnn::Net dnn_net;
@@ -62,6 +62,7 @@ private:
     std::vector<std::vector<cv::Mat>> dnn_results;
     std::vector<std::string> dnn_classes;
     std::fstream log_file;
+    std::filesystem::path volume_images_path;
 
     // Analysis results
     std::vector<std::vector<Droplet>> droplet_ellipses;
