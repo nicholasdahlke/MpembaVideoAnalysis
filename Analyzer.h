@@ -36,12 +36,6 @@ public:
         float confidence_threshold = 0.45;
     };
 
-    struct Droplet
-    {
-        cv::RotatedRect ellipse;
-        bool calculate_volume;
-    };
-
     int configure(analysisConfig _conf);
     int analyze();
     int analyze(int _num_droplets);
@@ -50,6 +44,20 @@ public:
 
 
 private:
+    struct Droplet
+    {
+        cv::RotatedRect ellipse;
+        bool calculate_volume;
+    };
+
+    struct Displacement
+    {
+        Droplet droplet;
+        Droplet droplet_next;
+        std::array<double,3> vector;
+        int start_frame_number;
+    };
+
     std::filesystem::path filename;
     cv::VideoCapture * capture{};
     int video_width{};
@@ -66,9 +74,10 @@ private:
 
     // Analysis results
     std::vector<std::vector<Droplet>> droplet_ellipses;
-    std::vector<std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>> displacement_vectors;
+    std::vector<std::vector<Displacement>> displacement_vectors;
     std::vector<std::vector<cv::Point_<float>>> droplet_tracks; // Untested
     std::vector<double> volumes;
+    std::vector<double> distances;
     int num_droplets = 0;
 
 
@@ -100,6 +109,7 @@ private:
     int getVolumeFromDroplets();
     static double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
+    int measureInterDropletDistances();
     std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area);
 };
 

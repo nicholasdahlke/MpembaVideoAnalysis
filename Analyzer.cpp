@@ -191,7 +191,7 @@ int Analyzer::getDisplacementVectors()
         log_file << "Calculating displacement vectors for frame " << i << "\n";
 
         cv::Mat preview_image = cv::Mat::zeros(cv::Size(video_width, video_height), CV_8UC3);
-        std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> displacement_center;
+        std::vector<Displacement> displacement_center;
 
         for(Droplet droplet : droplet_ellipses[i])
         {
@@ -206,27 +206,27 @@ int Analyzer::getDisplacementVectors()
             }
             else
             {
-                std::vector<std::array<double, 3>> displacementVectors; // x-vector component, y-vector component, distance
+                std::vector<std::tuple<std::array<double, 3>, Droplet>> displacementVectors; // x-vector component, y-vector component, distance
                 for(Droplet ellipse_next : droplet_ellipses[i + 1])
                 {
-                    std::array<double, 3> displacement{0, 0};
+                    std::array<double, 3> displacement{0};
                     if((ellipse_next.ellipse.center.x - curr_point.x) > 0 && (ellipse_next.ellipse.center.x - curr_point.x) < config.max_movement_threshold_displacement) { // Allow only positive displacement lower than the maximum allowed movement
                         displacement[0] = ellipse_next.ellipse.center.x - curr_point.x;
                         displacement[1] = ellipse_next.ellipse.center.y - curr_point.y;
                         displacement[2] = sqrt(pow(displacement[0], 2) + pow(displacement[1], 2));
-                        displacementVectors.push_back(displacement);
+                        displacementVectors.emplace_back(displacement, ellipse_next);
                     }
                 }
 
                 if(!displacementVectors.empty())
                 {
-                    std::sort(displacementVectors.begin(), displacementVectors.end(), [&](std::array<double, 3> & a, std::array<double, 3> & b)->bool{return a[2]>b[2];});
+                    std::sort(displacementVectors.begin(), displacementVectors.end(), [&](std::tuple<std::array<double, 3>, Droplet> & a, std::tuple<std::array<double, 3>, Droplet> & b)->bool{return std::get<0>(a)[2]>std::get<0>(b)[2];});
                     cv::Point displacedPoint;
-                    displacedPoint.x = curr_point.x + displacementVectors.back()[0];
-                    displacedPoint.y = curr_point.y + displacementVectors.back()[1];
+                    displacedPoint.x = curr_point.x + std::get<0>(displacementVectors.back())[0];
+                    displacedPoint.y = curr_point.y + std::get<0>(displacementVectors.back())[1];
 
                     cv::line(preview_image, curr_point, displacedPoint, cv::Scalar(0, 0, 255), 1);
-                    displacement_center.emplace_back(droplet.ellipse, displacementVectors.back());
+                    displacement_center.emplace_back(droplet, std::get<1>(displacementVectors.back()), std::get<0>(displacementVectors.back()), i);
                 }
                 else
                 {
@@ -255,6 +255,7 @@ int Analyzer::getDisplacementVectors()
     return 0;
 }
 
+/*
 int Analyzer::trackDroplet()
 {
 
@@ -268,16 +269,16 @@ int Analyzer::trackDroplet()
         log_file << "Tracking for frame " << frame_number << "\n";
 
         frame_number++;
-        for(std::tuple<cv::RotatedRect, std::array<double, 3>> displacement : *iter)
+        for(Displacement displacement : *iter)
         {
-            if(std::find(visited.begin(), visited.end(), std::get<0>(displacement).center) == visited.end())
+            if(std::find(visited.begin(), visited.end(), displacement.droplet.ellipse.center) == visited.end())
             {
                 std::vector<cv::Point_<float>> droplet_track;
-                droplet_track.push_back(std::get<0>(displacement).center);
+                droplet_track.push_back(displacement.droplet.ellipse.center);
                 auto next_iter =
                         iter + 1;
                 while (!next_iter->empty() && next_iter != displacement_vectors.end()) {
-                    for (std::tuple<cv::RotatedRect, std::array<double, 3>> displacement_next: *next_iter) {
+                    for (Displacement displacement_next: *next_iter) {
                         if (std::find(visited.begin(), visited.end(), std::get<0>(displacement_next).center) == visited.end())
                         {
                             int dx = droplet_track.back().x - std::get<0>(displacement_next).center.x;
@@ -299,7 +300,7 @@ int Analyzer::trackDroplet()
     }
     return 0;
 }
-
+*/
 int Analyzer::getVolumeFromDroplets()
 {
     auto frame_iter = droplet_ellipses.begin();
@@ -327,8 +328,8 @@ double Analyzer::getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib)
 {
     // The shape of the droplet is approximated as an elongated rotational ellipsoid V=(4/3)*pi*a^2*c#
 
-    float c = std::max(_droplet.size.width, _droplet.size.height) / 2.0;
-    float a = std::min(_droplet.size.width, _droplet.size.height) / 2.0;
+    double c = std::max(_droplet.size.width, _droplet.size.height) / 2.0;
+    double a = std::min(_droplet.size.width, _droplet.size.height) / 2.0;
     a = a*_calib;
     c = c*_calib;
     return (4.0/3.0) * std::numbers::pi * std::pow(a, 2) * c;
@@ -336,21 +337,53 @@ double Analyzer::getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib)
 
 int Analyzer::countDroplets()
 {
-    std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> total_displacements;
-    for(const std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>>& a : displacement_vectors)
+    std::vector<Displacement> total_displacements;
+    for(const std::vector<Displacement>& a : displacement_vectors)
     {
-        for(std::tuple<cv::RotatedRect, std::array<double, 3>> b : a)
+        for(Displacement b : a)
         {
             total_displacements.push_back(b);
         }
     }
     int count = 0;
-    for(std::tuple<cv::RotatedRect, std::array<double, 3>> displacement : total_displacements)
+    for(Displacement displacement : total_displacements)
     {
-        if(std::get<0>(displacement).center.x < config.x_threshold_count && (std::get<0>(displacement).center.x + std::get<1>(displacement)[0]) > config.x_threshold_count)
+        if(displacement.droplet.ellipse.center.x < config.x_threshold_count &&  displacement.droplet_next.ellipse.center.x > config.x_threshold_count)
             count++;
     }
     num_droplets = count;
+    return 0;
+}
+
+int Analyzer::measureInterDropletDistances()
+{
+    std::vector<Displacement> total_displacements;
+    for(const std::vector<Displacement>& a : displacement_vectors)
+    {
+        for(Displacement b : a)
+        {
+            total_displacements.push_back(b);
+        }
+    }
+    std::vector<Displacement> crossings;
+    for (Displacement displacement : total_displacements) // Measure only when crossing to avoid double counting a distance
+    {
+        if(displacement.droplet.ellipse.center.x < config.x_threshold_count &&  displacement.droplet_next.ellipse.center.x > config.x_threshold_count)
+            crossings.push_back(displacement);
+    }
+    std::vector<double> distances_mm;
+    for(auto it = crossings.begin(); std::next(it) != crossings.end(); std::advance(it, 1))
+    {
+        double d1 = it->droplet_next.ellipse.center.x - config.x_threshold_count;
+        double d2 = std::next(it)->droplet_next.ellipse.center.x - config.x_threshold_count;
+        double v = 0.5*(it->vector[2] + std::next(it)->vector[2]);
+        double dt = std::next(it)->start_frame_number - it->start_frame_number;
+        double l = v*dt - d2 + d1;
+        std::cout << "Distance of " << l << "px measured. \n";
+        log_file << "Distance of " << l << "px measured. \n";
+        distances_mm.push_back(l*config.calib);
+    }
+    distances = distances_mm;
     return 0;
 }
 
@@ -437,10 +470,15 @@ int Analyzer::analyze(int _num_droplets)
         if(error_code != 0)
             return -1;
 
+        error_code = measureInterDropletDistances();
+        if(error_code != 0)
+            return -1;
+
         std::cout << "Analysis finished, writing results to file" << std::endl;
         log_file << "Analysis finished, writing results to file" << "\n";
         writeToFile(volumes, filename, "volumes", ".csv");
         writeToFile(num_droplets, filename, "droplet_count", ".csv");
+        writeToFile(distances, filename, "distances", ".csv");
     }
     else
     {
@@ -593,12 +631,12 @@ void Analyzer::showAllMovementVectors()
 {
     cv::RNG rng;
     cv::Mat preview_image = cv::Mat::zeros(cv::Size(video_width, video_height), CV_8UC3);
-    for(std::vector<std::tuple<cv::RotatedRect, std::array<double, 3>>> image_displ : displacement_vectors)
+    for(std::vector<Displacement> image_displ : displacement_vectors)
     {
-        for (std::tuple<cv::RotatedRect, std::array<double, 3>> displ_vec : image_displ)
+        for (Displacement displ_vec : image_displ)
         {
-            cv::Point curr_point = std::get<0>(displ_vec).center;
-            std::array<double, 3> displ_vec_array = std::get<1>(displ_vec);
+            cv::Point curr_point = displ_vec.droplet.ellipse.center;
+            std::array<double, 3> displ_vec_array = displ_vec.vector;
             cv::Point displaced_point;
             displaced_point.x = curr_point.x + displ_vec_array[0];
             int rand_shift = rng.uniform(-200,  200);
