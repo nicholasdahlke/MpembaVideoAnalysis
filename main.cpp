@@ -47,13 +47,13 @@ int main(int argc, char* argv[]) {
     config.calib = calib_constant;
     config.skip_frames_volume = 0;
     config.x_threshold_count = 810;
-    config.show_frames_droplets = false;
+    config.show_frames_droplets = true;
     config.show_frames_displacement = false;
     config.right_border_displacement = 1800;
     config.confidence_threshold = 0.7;
     analyzer.openCapture();
     analyzer.configure(config);
-    int return_code = analyzer.analyze();
+    int return_code = analyzer.analyze(300);
 
     int count = analyzer.getNumDroplets();
     std::cout << "Counted " << count << " droplets" << std::endl;

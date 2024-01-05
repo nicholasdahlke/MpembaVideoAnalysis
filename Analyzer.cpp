@@ -104,8 +104,9 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                 cv::adaptiveThreshold(droplet_roi, droplet_roi, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 21, 2);
                 cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
                 cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
-                double max_drop_area = std::numbers::pi * detection.height * detection.width * 1.2;
-                contours = filterContours(contours, max_drop_area);
+                double max_drop_area = std::numbers::pi * detection.height * detection.width * 0.5;
+                double min_drop_area = max_drop_area * 0.5;
+                contours = filterContours(contours, max_drop_area, min_drop_area);
                 // Shift contours
                 for(std::vector<cv::Point>& contour: contours)
                 {
@@ -158,7 +159,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
     return 0;
 }
 
-std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area)
+std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area, double _min_area)
 {
     std::vector<std::vector<cv::Point>> filtered_contours;
     std::vector<double> contour_areas;
@@ -170,7 +171,7 @@ std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<s
             contour_areas.push_back(cv::contourArea(contour));
         }
     }
-    double contour_median_lower = 0.1 * getMedian(contour_areas);
+    double contour_median_lower = 0.2 * getMedian(contour_areas);
     std::vector<std::vector<cv::Point>>::iterator contour_it;
     for(contour_it = filtered_contours.begin(); contour_it != filtered_contours.end();)
     {
@@ -379,8 +380,6 @@ int Analyzer::measureInterDropletDistances()
         double v = 0.5*(it->vector[2] + std::next(it)->vector[2]);
         double dt = std::next(it)->start_frame_number - it->start_frame_number;
         double l = v*dt - d2 + d1;
-        std::cout << "Distance of " << l << "px measured. \n";
-        log_file << "Distance of " << l << "px measured. \n";
         distances_mm.push_back(l*config.calib);
     }
     distances = distances_mm;

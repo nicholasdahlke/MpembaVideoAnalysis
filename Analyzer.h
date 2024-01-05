@@ -110,7 +110,7 @@ private:
     static double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
     int measureInterDropletDistances();
-    std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area);
+    std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_drop_area, double _min_drop_area);
 };
 
 
