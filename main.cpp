@@ -8,7 +8,8 @@
 const char * params = "{ help h         |           | Print usage                                    }"
                       "{ @video-file    |           | Path to a video                                }"
                       "{ @dnn-file      |           | File containing the pretrained DNN             }"
-                      "{ calib-value    |           | Calibration value                              }";
+                      "{ calib-value    |           | Calibration value                              }"
+                      "{ frame-amount   |           | Amount of frames to analyze                    }";
 
 
 int main(int argc, char* argv[]) {
@@ -39,6 +40,7 @@ int main(int argc, char* argv[]) {
         calib_constant = calib.getCalibrationConstant();
         video_cap_calib.release();
     }
+
     Analyzer analyzer(videofile, netfile);
     Analyzer::analysisConfig config;
     config.max_movement_threshold_displacement = 10000;
@@ -47,13 +49,22 @@ int main(int argc, char* argv[]) {
     config.calib = calib_constant;
     config.skip_frames_volume = 0;
     config.x_threshold_count = 810;
-    config.show_frames_droplets = true;
+    config.show_frames_droplets = false;
     config.show_frames_displacement = false;
     config.right_border_displacement = 1800;
     config.confidence_threshold = 0.7;
     analyzer.openCapture();
     analyzer.configure(config);
-    int return_code = analyzer.analyze(300);
+    int return_code;
+    if (parser.has("frame-amount"))
+    {
+        int num_frames = parser.get<int>("frame-amount");
+        return_code = analyzer.analyze(num_frames);
+    }
+    else
+    {
+        return_code = analyzer.analyze();
+    }
 
     int count = analyzer.getNumDroplets();
     std::cout << "Counted " << count << " droplets" << std::endl;
