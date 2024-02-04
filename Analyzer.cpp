@@ -27,6 +27,7 @@ Analyzer::Analyzer(const std::filesystem::path& _filename, const std::filesystem
     }
     net_input_size = cv::Size(640.0, 640.0);
     dnn_classes.emplace_back("droplets");
+    dnn_classes.emplace_back("droplets_frozen");
 
 }
 
@@ -76,15 +77,15 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
             break;
         std::vector<cv::Mat> current_detections = dnn_results[i];
         cv::Mat current_annotated = current_frame.clone();
-        std::vector<cv::Rect> detections = getBoundingRectFromResults(current_annotated, current_detections, dnn_classes);
+        std::vector<Detection> detections = getBoundingRectFromResults(current_annotated, current_detections, dnn_classes);
         cv::cvtColor(current_frame, current_frame, cv::COLOR_BGR2GRAY);
         std::vector<Droplet> ellipses;
         int volume_droplet_nr = 0;
-        for (cv::Rect detection : detections)
+        for (Detection detection_obj : detections)
         {
-            detection = enlargeRect(detection, 1.2); //Enlarge rectangle to avoid problematic collisions with borders
+            cv::Rect detection = enlargeRect(detection_obj.getRect(), 1.2); //Enlarge rectangle to avoid problematic collisions with borders
             cv::rectangle(current_annotated, detection, cv::Scalar(0, 255, 0), 2);
-            bool skip_droplet = false;
+            bool skip_droplet = false; //temp
             if(detection.x < 0)
                 skip_droplet = true;
             if(detection.y < 0)
@@ -125,7 +126,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                     max_contour = contours.back();
                 std::vector<std::vector<cv::Point>> cont_vec;
                 cv::RotatedRect drop_ellipse = cv::fitEllipse(max_contour);
-                ellipses.push_back((Droplet){drop_ellipse, true});
+                ellipses.emplace_back(drop_ellipse, true, detection_obj.getDetectionType() == dnn_classes[1]);
                 cv::Mat temp_annot = current_annotated.clone();
                 cv::ellipse(temp_annot, drop_ellipse, cv::Scalar(0, 255, 255));
                 cv::imwrite(volume_images_path.string() + "droplet_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", temp_annot(detection));
@@ -136,7 +137,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                 int width = detection.width;
                 int height = detection.height;
                 cv::Point center(x_offset + width/2, y_offset + height/2);
-                ellipses.push_back((Droplet){cv::RotatedRect(center, cv::Size(width, height), 0), false});
+                ellipses.emplace_back(cv::RotatedRect(center, cv::Size(width, height), 0), false, detection_obj.getDetectionType() == dnn_classes[1]);
 
             }
         }
@@ -145,9 +146,9 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
             for(Droplet droplet : ellipses)
             {
                 cv::Scalar color(0, 0, 255);
-                if(droplet.calculate_volume)
+                if(droplet.getCalcVolume())
                     color = cv::Scalar(0, 255, 0);
-                cv::ellipse(current_annotated, droplet.ellipse, color);
+                cv::ellipse(current_annotated, droplet.getEllipse(), color);
             }
             std::cout << "Frame end\n\n";
             cv::imshow("Frames", current_annotated);
@@ -196,10 +197,10 @@ int Analyzer::getDisplacementVectors()
 
         for(Droplet droplet : droplet_ellipses[i])
         {
-            cv::ellipse(preview_image, droplet.ellipse, cv::Scalar (0, 255, 0), 2);
-            cv::circle(preview_image, droplet.ellipse.center, 5, (0, 0, 255), -1);
+            cv::ellipse(preview_image, droplet.getEllipse(), cv::Scalar (0, 255, 0), 2);
+            cv::circle(preview_image, droplet.getEllipse().center, 5, (0, 0, 255), -1);
 
-            cv::Point curr_point = droplet.ellipse.center;
+            cv::Point curr_point = droplet.getEllipse().center;
             if(curr_point.x > config.right_border_displacement)
             {
                 std::cerr << "Droplet behind border, displacement calculation will most likely fail:SKIPPING" << std::endl;
@@ -211,9 +212,9 @@ int Analyzer::getDisplacementVectors()
                 for(Droplet ellipse_next : droplet_ellipses[i + 1])
                 {
                     std::array<double, 3> displacement{0};
-                    if((ellipse_next.ellipse.center.x - curr_point.x) > 0 && (ellipse_next.ellipse.center.x - curr_point.x) < config.max_movement_threshold_displacement) { // Allow only positive displacement lower than the maximum allowed movement
-                        displacement[0] = ellipse_next.ellipse.center.x - curr_point.x;
-                        displacement[1] = ellipse_next.ellipse.center.y - curr_point.y;
+                    if((ellipse_next.getEllipse().center.x - curr_point.x) > 0 && (ellipse_next.getEllipse().center.x - curr_point.x) < config.max_movement_threshold_displacement) { // Allow only positive displacement lower than the maximum allowed movement
+                        displacement[0] = ellipse_next.getEllipse().center.x - curr_point.x;
+                        displacement[1] = ellipse_next.getEllipse().center.y - curr_point.y;
                         displacement[2] = sqrt(pow(displacement[0], 2) + pow(displacement[1], 2));
                         displacementVectors.emplace_back(displacement, ellipse_next);
                     }
@@ -243,8 +244,8 @@ int Analyzer::getDisplacementVectors()
         {
             for(Droplet droplet : droplet_ellipses[i + 1])
             {
-                cv::ellipse(preview_image, droplet.ellipse, cv::Scalar (255, 0, 0), 2);
-                cv::circle(preview_image, droplet.ellipse.center, 5, (0, 0, 255), -1);
+                cv::ellipse(preview_image, droplet.getEllipse(), cv::Scalar (255, 0, 0), 2);
+                cv::circle(preview_image, droplet.getEllipse().center, 5, (0, 0, 255), -1);
             }
             cv::imshow("Frame", preview_image);
             int keyboard = cv::waitKey(100);
@@ -314,9 +315,9 @@ int Analyzer::getVolumeFromDroplets()
 
         for(Droplet droplet : *frame_iter)
         {
-            if (droplet.ellipse.center.x > config.left_border_volume && droplet.ellipse.center.x < config.right_border_volume && droplet.calculate_volume)
+            if (droplet.getEllipse().center.x > config.left_border_volume && droplet.getEllipse().center.x < config.right_border_volume && droplet.getCalcVolume())
             {
-                volumes.push_back(getVolumeFromDroplet(droplet.ellipse, config.calib));
+                volumes.push_back(getVolumeFromDroplet(droplet.getEllipse(), config.calib));
             }
         }
         ++frame_iter;
@@ -346,13 +347,15 @@ int Analyzer::countDroplets()
             total_displacements.push_back(b);
         }
     }
-    int count = 0;
     for(Displacement displacement : total_displacements)
     {
-        if(displacement.droplet.ellipse.center.x < config.x_threshold_count &&  displacement.droplet_next.ellipse.center.x > config.x_threshold_count)
-            count++;
+        if(displacement.droplet.getEllipse().center.x < config.x_threshold_count &&  displacement.droplet_next.getEllipse().center.x > config.x_threshold_count && !(displacement.droplet.getIsFrozen() || displacement.droplet_next.getIsFrozen()))
+            num_droplets++;
+
+        if(displacement.droplet.getEllipse().center.x < config.x_threshold_count &&  displacement.droplet_next.getEllipse().center.x > config.x_threshold_count && (displacement.droplet.getIsFrozen() || displacement.droplet_next.getIsFrozen()))
+            num_droplets_frozen++;
     }
-    num_droplets = count;
+
     return 0;
 }
 
@@ -369,14 +372,14 @@ int Analyzer::measureInterDropletDistances()
     std::vector<Displacement> crossings;
     for (Displacement displacement : total_displacements) // Measure only when crossing to avoid double counting a distance
     {
-        if(displacement.droplet.ellipse.center.x < config.x_threshold_count &&  displacement.droplet_next.ellipse.center.x > config.x_threshold_count)
+        if(displacement.droplet.getEllipse().center.x < config.x_threshold_count &&  displacement.droplet_next.getEllipse().center.x > config.x_threshold_count)
             crossings.push_back(displacement);
     }
     std::vector<double> distances_mm;
     for(auto it = crossings.begin(); std::next(it) != crossings.end(); std::advance(it, 1))
     {
-        double d1 = it->droplet_next.ellipse.center.x - config.x_threshold_count;
-        double d2 = std::next(it)->droplet_next.ellipse.center.x - config.x_threshold_count;
+        double d1 = it->droplet_next.getEllipse().center.x - config.x_threshold_count;
+        double d2 = std::next(it)->droplet_next.getEllipse().center.x - config.x_threshold_count;
         double v = 0.5*(it->vector[2] + std::next(it)->vector[2]);
         double dt = std::next(it)->start_frame_number - it->start_frame_number;
         double l = v*dt - d2 + d1;
@@ -477,6 +480,7 @@ int Analyzer::analyze(int _num_droplets)
         log_file << "Analysis finished, writing results to file" << "\n";
         writeToFile(volumes, filename, "volumes", ".csv");
         writeToFile(num_droplets, filename, "droplet_count", ".csv");
+        writeToFile(num_droplets_frozen, filename, "droplet_count_frozen", ".csv");
         writeToFile(distances, filename, "distances", ".csv");
     }
     else
@@ -562,7 +566,7 @@ void Analyzer::drawLabel(cv::Mat& _input_image, const std::string& _label, int _
     cv::putText(_input_image, _label, cv::Point(_left, _top + label_size.height), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 1);
 }
 
-std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size) const
+std::vector<Detection> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size) const
 {
     std::vector<int> class_ids;
     std::vector<float> confidences;
@@ -572,7 +576,7 @@ std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation
     float y_factor = _annotation_image.rows / _size;
     float *data = (float *)outputs[0].data;
     const int rows = 25200;
-    const int dimensions = 6;
+    const int dimensions = 7; // Always adjust for multi class models
 
     for (size_t i = 0; i < rows; ++i)
     {
@@ -600,14 +604,14 @@ std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation
                 int width = int(w * x_factor);
                 int height = int(h * y_factor);
 
-                boxes.push_back(cv::Rect(cv::Point(left, top), cv::Point(left + width, top + height)));
+                boxes.emplace_back(cv::Point(left, top), cv::Point(left + width, top + height));
             }
         }
         data += dimensions;
     }
     std::vector<int> indices;
     cv::dnn::NMSBoxes(boxes, confidences, config.score_threshold, config.nms_threshold, indices);
-    std::vector<cv::Rect> bounding_rects;
+    std::vector<Detection> bounding_rects;
     for (int i = 0; i < indices.size(); i++)
     {
         int idx = indices[i];
@@ -617,12 +621,13 @@ std::vector<cv::Rect> Analyzer::getBoundingRectFromResults(cv::Mat & _annotation
 
         //cv::Rect current_bounding_rect = box;
         cv::rectangle(_annotation_image, box, cv::Scalar(255, 0, 0), 3);
-        bounding_rects.push_back(box);
         // Get the label for the class name and its confidence.
         std::string label = cv::format("%.2f", confidences[idx]);
         label = _class_name[class_ids[idx]] + ":" + label;
         // Draw class labels.
         drawLabel(_annotation_image, label, left, top);
+        bounding_rects.emplace_back(box, _class_name[class_ids[idx]], confidences[idx]);
+
     }
     return bounding_rects;
 }
@@ -634,7 +639,7 @@ void Analyzer::showAllMovementVectors()
     {
         for (Displacement displ_vec : image_displ)
         {
-            cv::Point curr_point = displ_vec.droplet.ellipse.center;
+            cv::Point curr_point = displ_vec.droplet.getEllipse().center;
             std::array<double, 3> displ_vec_array = displ_vec.vector;
             cv::Point displaced_point;
             displaced_point.x = curr_point.x + displ_vec_array[0];

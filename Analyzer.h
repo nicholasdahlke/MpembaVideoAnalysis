@@ -13,6 +13,8 @@
 #include <string>
 #include <fstream>
 #include <filesystem>
+#include "Droplet.h"
+#include "Detection.h"
 
 class Analyzer {
 public:
@@ -32,7 +34,7 @@ public:
         int x_threshold_count = 20;
         double calib = 1.0;
         float score_threshold = 0.5;
-        float nms_threshold = 0.45;
+        float nms_threshold = 0.4;
         float confidence_threshold = 0.45;
     };
 
@@ -44,11 +46,6 @@ public:
 
 
 private:
-    struct Droplet
-    {
-        cv::RotatedRect ellipse;
-        bool calculate_volume;
-    };
 
     struct Displacement
     {
@@ -79,6 +76,7 @@ private:
     std::vector<double> volumes;
     std::vector<double> distances;
     int num_droplets = 0;
+    int num_droplets_frozen = 0;
 
 
 private:
@@ -90,7 +88,7 @@ private:
     std::vector<cv::Mat> applyNetToFrame(const cv::Mat& _frame);
     void applyNetToFrames(int _num_droplets);
     static void drawLabel(cv::Mat& _input_image, const std::string& _label, int _left, int _top);
-    std::vector<cv::Rect> getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size= 640) const;
+    std::vector<Detection> getBoundingRectFromResults(cv::Mat & _annotation_image, std::vector<cv::Mat> & outputs, const std::vector<std::string> & _class_name, float _size= 640) const;
     void showAllMovementVectors();
     template <typename T>
     void writeToFile(std::vector<T> _vec, std::filesystem::path _filename, std::string _type, std::string _extension);
