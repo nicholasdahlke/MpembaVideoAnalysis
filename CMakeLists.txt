@@ -3,7 +3,6 @@ project(MpembaVideoAnalysis)
 set(CMAKE_CXX_STANDARD 23)
 
 find_package(OpenCV REQUIRED)
-find_package(TBB REQUIRED)
 
 
 add_executable(MpembaVideoAnalysis main.cpp Calibrator.cpp Calibrator.h Analyzer.cpp Analyzer.h
@@ -13,4 +12,4 @@ add_executable(MpembaVideoAnalysis main.cpp Calibrator.cpp Calibrator.h Analyzer
         Droplet.h
         Detection.cpp
         Detection.h)
-target_link_libraries(MpembaVideoAnalysis ${OpenCV_LIBS} TBB::tbb bgslibrary_core)
+target_link_libraries(MpembaVideoAnalysis ${OpenCV_LIBS})
