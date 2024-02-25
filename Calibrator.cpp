@@ -87,7 +87,7 @@ void Calibrator::showDistancePopup()
 {
     char distance_real_cstr[1024];
     FILE *fp = popen("zenity  --title  \"Distance\" --entry --text \"Enter distance in mm here\"", "r");
-    fgets(distance_real_cstr, 1025, fp);
+    fgets(distance_real_cstr, 1024, fp);
     std::string distance_real_str(distance_real_cstr);
     float distance_real = std::stof(distance_real_str);
     distance_mm = distance_real;
