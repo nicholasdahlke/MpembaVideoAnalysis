@@ -106,8 +106,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                 cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
                 cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
                 double max_drop_area = std::numbers::pi * detection.height * detection.width * 0.5;
-                double min_drop_area = max_drop_area * 0.5;
-                contours = filterContours(contours, max_drop_area, min_drop_area);
+                contours = filterContours(contours, max_drop_area);
                 // Shift contours
                 for(std::vector<cv::Point>& contour: contours)
                 {
@@ -153,6 +152,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
             std::cout << "Frame end\n\n";
             cv::imshow("Frames", current_annotated);
             cv::waitKey(500);
+            //cv::imwrite(volume_images_path.string() + "annotated_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", current_annotated);
         }
         droplet_ellipses.push_back(ellipses);
         volume_image_nr++;
@@ -160,7 +160,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
     return 0;
 }
 
-std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area, double _min_area)
+std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area)
 {
     std::vector<std::vector<cv::Point>> filtered_contours;
     std::vector<double> contour_areas;
@@ -375,7 +375,7 @@ int Analyzer::measureInterDropletDistances()
         if(displacement.droplet.getEllipse().center.x < config.x_threshold_count &&  displacement.droplet_next.getEllipse().center.x > config.x_threshold_count)
             crossings.push_back(displacement);
     }
-    std::vector<double> distances_mm;
+    std::vector<double> distances_m;
     for(auto it = crossings.begin(); std::next(it) != crossings.end(); std::advance(it, 1))
     {
         double d1 = it->droplet_next.getEllipse().center.x - config.x_threshold_count;
@@ -383,9 +383,9 @@ int Analyzer::measureInterDropletDistances()
         double v = 0.5*(it->vector[2] + std::next(it)->vector[2]);
         double dt = std::next(it)->start_frame_number - it->start_frame_number;
         double l = v*dt - d2 + d1;
-        distances_mm.push_back(l*config.calib);
+        distances_m.push_back(l * config.calib);
     }
-    distances = distances_mm;
+    distances = distances_m;
     return 0;
 }
 
@@ -415,6 +415,9 @@ void Analyzer::printConfig(Analyzer::analysisConfig _conf)
     info_stream << "score_threshold=" << _conf.score_threshold << "\n";
     info_stream << "nms_threshold=" << _conf.nms_threshold << "\n";
     info_stream << "confidence_threshold" << _conf.confidence_threshold << "\n";
+    info_stream << "speed_border_left" << _conf.speed_border_left << "\n";
+    info_stream << "speed_border_right" << _conf.speed_border_right << "\n";
+
 
     std::cout << info_stream.str();
     log_file << info_stream.str();
@@ -449,32 +452,14 @@ int Analyzer::analyze(int _num_droplets)
 {
     if (configured)
     {
-        int error_code = 0;
-
-        if(error_code != 0)
-            return -1;
-
         applyNetToFrames(_num_droplets);
 
-        error_code = getDropletsFromVideo(_num_droplets);
-        if (error_code != 0)
-            return -1;
-
-        error_code = getDisplacementVectors();
-        if (error_code != 0)
-            return -1;
-
-        error_code = getVolumeFromDroplets();
-        if(error_code != 0)
-            return -1;
-
-        error_code = countDroplets();
-        if(error_code != 0)
-            return -1;
-
-        error_code = measureInterDropletDistances();
-        if(error_code != 0)
-            return -1;
+        getDropletsFromVideo(_num_droplets);
+        getDisplacementVectors();
+        getVolumeFromDroplets();
+        countDroplets();
+        measureInterDropletDistances();
+        getSpeeds();
 
         std::cout << "Analysis finished, writing results to file" << std::endl;
         log_file << "Analysis finished, writing results to file" << "\n";
@@ -482,6 +467,7 @@ int Analyzer::analyze(int _num_droplets)
         writeToFile(num_droplets, filename, "droplet_count", ".csv");
         writeToFile(num_droplets_frozen, filename, "droplet_count_frozen", ".csv");
         writeToFile(distances, filename, "distances", ".csv");
+        writeToFile(speeds, filename, "speeds", ".csv");
     }
     else
     {
@@ -710,4 +696,23 @@ cv::Rect Analyzer::enlargeRect(cv::Rect _rect, double _factor)
     _rect.x -= (_rect.width-pre_width)/2;
     _rect.y -= (_rect.height-pre_height)/2;
     return _rect;
+}
+
+int Analyzer::getSpeeds()
+{   //Get the droplet speed in m/frame
+    if(displacement_vectors.empty())
+    {
+        std::cerr << "Error: No displacement vectors calculated\n";
+        log_file << "Error: No displacement vectors calculated\n";
+        return -1;
+    }
+    for(std::vector<Displacement> disp_vect_image : displacement_vectors)
+    {
+        for(Displacement displacement : disp_vect_image)
+        {
+            //if(displacement.droplet.getEllipse().center.x < config.speed_border_left || displacement.droplet_next.getEllipse().center.x > (video_width - config.speed_border_right))
+                speeds.push_back(displacement.vector[2]*config.calib);
+        }
+    }
+    return 0;
 }

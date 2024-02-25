@@ -36,6 +36,8 @@ public:
         float score_threshold = 0.5;
         float nms_threshold = 0.4;
         float confidence_threshold = 0.45;
+        float speed_border_left = 50;
+        float speed_border_right = 50;
     };
 
     int configure(analysisConfig _conf);
@@ -57,9 +59,9 @@ private:
 
     std::filesystem::path filename;
     cv::VideoCapture * capture{};
-    int video_width{};
-    int video_height{};
-    int video_frame_count{};
+    double video_width;
+    double video_height;
+    double video_frame_count;
     analysisConfig config;
     bool configured = false;
     cv::dnn::Net dnn_net;
@@ -75,6 +77,7 @@ private:
     std::vector<std::vector<cv::Point_<float>>> droplet_tracks; // Untested
     std::vector<double> volumes;
     std::vector<double> distances;
+    std::vector<double> speeds;
     int num_droplets = 0;
     int num_droplets_frozen = 0;
 
@@ -103,12 +106,13 @@ private:
     // Analysis functions
     int getDropletsFromVideo(int _num_droplets);
     int getDisplacementVectors();
+    int getSpeeds();
     int trackDroplet(); // Untested
     int getVolumeFromDroplets();
     static double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
     int measureInterDropletDistances();
-    std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_drop_area, double _min_drop_area);
+    std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_drop_area);
 };
 
 

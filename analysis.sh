@@ -1,7 +1,7 @@
 #!/bin/bash
 FILES=`zenity --file-selection --title="Select video files for analysis" --multiple --file-filter='Video files (mp4, avi) | *.mp4 *.avi'`
 IS_CALIBRATED=0
-NETFILE="/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/best_new.onnx"
+NETFILE="/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/multiphase.onnx"
 CALIB_VALUE=""
 while IFS="|" read -ra FILES; do
     for i in "${FILES[@]}"; do
