@@ -12,7 +12,7 @@ class TestMpemba(TestCase):
 
 class TestCorrector(TestCase):
     def setUp(self):
-        video_file = "/mnt/md0/Progammiersoftwareprojekte/PycharmProjects/MpembaDataEval/TestData/Frozen T Cool -33-0 T Warm 70-0 Oil 700 Water 10.mp4"
+        video_file = "TestData/Frozen T Cool -33-0 T Warm 70-0 Oil 700 Water 10.mp4"
         exp_setup = mpemba.ExperimentalSetup(flow_rate_oil_ul=700,
                                              flow_rate_water_ul=10,
                                              frames_per_second=48.79,
