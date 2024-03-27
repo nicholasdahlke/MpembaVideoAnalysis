@@ -157,6 +157,7 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
         droplet_ellipses.push_back(ellipses);
         volume_image_nr++;
     }
+    capture->set(cv::CAP_PROP_POS_FRAMES, 0); // Reset frame pointer to beginning
     return 0;
 }
 
@@ -460,6 +461,7 @@ int Analyzer::analyze(int _num_droplets)
         countDroplets();
         measureInterDropletDistances();
         getSpeeds();
+        showAllMovementVectors();
 
         std::cout << "Analysis finished, writing results to file" << std::endl;
         log_file << "Analysis finished, writing results to file" << "\n";
@@ -468,6 +470,7 @@ int Analyzer::analyze(int _num_droplets)
         writeToFile(num_droplets_frozen, filename, "droplet_count_frozen", ".csv");
         writeToFile(distances, filename, "distances", ".csv");
         writeToFile(speeds, filename, "speeds", ".csv");
+        writeToFile(config.calib, filename, "calibration", ".csv");
     }
     else
     {
@@ -620,7 +623,8 @@ std::vector<Detection> Analyzer::getBoundingRectFromResults(cv::Mat & _annotatio
 void Analyzer::showAllMovementVectors()
 {
     cv::RNG rng;
-    cv::Mat preview_image = cv::Mat::zeros(cv::Size(video_width, video_height), CV_8UC3);
+    cv::Mat preview_image;
+    *capture >> preview_image;
     for(std::vector<Displacement> image_displ : displacement_vectors)
     {
         for (Displacement displ_vec : image_displ)
@@ -629,7 +633,8 @@ void Analyzer::showAllMovementVectors()
             std::array<double, 3> displ_vec_array = displ_vec.vector;
             cv::Point displaced_point;
             displaced_point.x = curr_point.x + displ_vec_array[0];
-            int rand_shift = rng.uniform(-200,  200);
+            //int rand_shift = rng.uniform(-200,  200);  // Randomly shift the movement vectors up and down for better visibility
+            int rand_shift = 0;
             displaced_point.y = curr_point.y + displ_vec_array[1] + rand_shift;
             curr_point.y = curr_point.y + rand_shift;
             cv::line(preview_image, curr_point, displaced_point, cv::Scalar(rng.uniform(0,255), rng.uniform(0,rng.uniform(0,255)), 255), 1);
