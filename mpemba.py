@@ -4,6 +4,7 @@ import csv
 import numpy as np
 from dataclasses import dataclass
 import scipy
+import tomllib
 
 
 @dataclass
@@ -46,6 +47,35 @@ def checkIfNone(variables: list):
 
 def printSci(value, name: str, precision: int = 3):
     print(name, "{0:.{1:d}e}".format(value, precision))
+
+
+def readExperiment(filename: str):
+    with open(filename, "rb") as toml:
+        toml_dict = tomllib.load(toml)
+    video_filename = toml_dict["data"]["video"]
+    flow_rate_oil_ul = float(toml_dict["data"]["flow_rate_oil_ul"])
+    flow_rate_water_ul = float(toml_dict["data"]["flow_rate_water_ul"])
+    frames_per_second = float(toml_dict["data"]["frames_per_second"])
+    initial_temperature = float(toml_dict["data"]["initial_temperature"])
+    cooler_temperature = float(toml_dict["data"]["cooler_temperature"])
+    cooler_length = float(toml_dict["data"]["cooler_length"])
+    thermal_conductivity_tubing = float(toml_dict["data"]["thermal_conductivity_tubing"])
+    inner_radius_tubing = float(toml_dict["data"]["inner_radius_tubing"])
+    outer_radius_tubing = float(toml_dict["data"]["outer_radius_tubing"])
+    water_density = float(toml_dict["data"]["water_density"])
+    data_recorded = datetime.datetime.strptime(toml_dict["data"]["date_recorded"], '%Y-%m-%d %H:%M:%S')
+    r_exp_setup = ExperimentalSetup(flow_rate_oil_ul=flow_rate_oil_ul,
+                                    flow_rate_water_ul=flow_rate_water_ul,
+                                    frames_per_second=frames_per_second,
+                                    initial_temperature=initial_temperature,
+                                    cooler_temperature=cooler_temperature,
+                                    cooler_length=cooler_length,
+                                    thermal_conductivity_tubing=thermal_conductivity_tubing,
+                                    inner_radius_tubing=inner_radius_tubing,
+                                    outer_radius_tubing=outer_radius_tubing,
+                                    water_density=water_density)
+    return r_exp_setup, data_recorded, video_filename
+
 
 
 class Experiment:
@@ -289,5 +319,8 @@ class ErrorCalculator:
         def nucleation_rate(t, nu, n0, v):
             return -1 * (1 / (t * v)) * np.log(nu / n0)
 
-        self._error_pos = nucleation_rate(self.time + self.time_error, self.unfrozen_count + self.unfrozen_error, self.total_count, self.volume - self.volume_error) - self.nucleation_rate
-        self._error_neg = self.nucleation_rate - nucleation_rate(self.time, self.unfrozen_count, self.total_count + self.total_error, self.volume + self.volume_error)
+        self._error_pos = nucleation_rate(self.time + self.time_error, self.unfrozen_count + self.unfrozen_error,
+                                          self.total_count, self.volume - self.volume_error) - self.nucleation_rate
+        self._error_neg = self.nucleation_rate - nucleation_rate(self.time, self.unfrozen_count,
+                                                                 self.total_count + self.total_error,
+                                                                 self.volume + self.volume_error)
