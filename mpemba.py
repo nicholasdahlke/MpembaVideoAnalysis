@@ -49,6 +49,10 @@ def printSci(value, name: str, precision: int = 3):
     print(name, "{0:.{1:d}e}".format(value, precision))
 
 
+def print_(value, name: str, precision: int = 3):
+    print(name, "{0:.{prec}f}".format(value, prec=precision))
+
+
 def readExperiment(filename: str):
     with open(filename, "rb") as toml:
         toml_dict = tomllib.load(toml)
@@ -75,7 +79,6 @@ def readExperiment(filename: str):
                                     outer_radius_tubing=outer_radius_tubing,
                                     water_density=water_density)
     return r_exp_setup, data_recorded, video_filename
-
 
 
 class Experiment:
