@@ -258,52 +258,7 @@ int Analyzer::getDisplacementVectors()
     return 0;
 }
 
-/*
-int Analyzer::trackDroplet()
-{
 
-    auto iter = displacement_vectors.begin();
-    std::vector<cv::Point_<float>> visited;
-    std::advance(iter, config.skip_frames_tracking);
-    int frame_number = 0;
-    while (iter != displacement_vectors.end())
-    {
-        std::cout << "Tracking for frame " << frame_number << "\n";
-        log_file << "Tracking for frame " << frame_number << "\n";
-
-        frame_number++;
-        for(Displacement displacement : *iter)
-        {
-            if(std::find(visited.begin(), visited.end(), displacement.droplet.ellipse.center) == visited.end())
-            {
-                std::vector<cv::Point_<float>> droplet_track;
-                droplet_track.push_back(displacement.droplet.ellipse.center);
-                auto next_iter =
-                        iter + 1;
-                while (!next_iter->empty() && next_iter != displacement_vectors.end()) {
-                    for (Displacement displacement_next: *next_iter) {
-                        if (std::find(visited.begin(), visited.end(), std::get<0>(displacement_next).center) == visited.end())
-                        {
-                            int dx = droplet_track.back().x - std::get<0>(displacement_next).center.x;
-                            int dy = droplet_track.back().y - std::get<0>(displacement_next).center.y;
-                            if (dx == 0 && dy == 0) {
-                                droplet_track.push_back(std::get<0>(displacement_next).center);
-                                break;
-                            }
-                        }
-                    }
-                    std::advance(next_iter, 1);
-                }
-                droplet_tracks.push_back(droplet_track);
-                visited.insert(visited.end(), droplet_track.begin(), droplet_track.end());
-            }
-
-        }
-        std::advance(iter, 1);
-    }
-    return 0;
-}
-*/
 int Analyzer::getVolumeFromDroplets()
 {
     auto frame_iter = droplet_ellipses.begin();
@@ -404,10 +359,9 @@ void Analyzer::printConfig(Analyzer::analysisConfig _conf)
     info_stream << std::scientific;
     info_stream << "show_frames_droplets=" + boolToString(_conf.show_frames_droplets) + "\n";
     info_stream << "show_frames_displacement=" + boolToString(_conf.show_frames_displacement) + "\n";
+    info_stream << "show_displacement_vectors" + boolToString(_conf.show_displacement_vectors) + "\n";
     info_stream << "right_border_displacement=" << _conf.right_border_displacement << "\n";
     info_stream << "max_movement_threshold_displacement=" << _conf.max_movement_threshold_displacement << "\n";
-    info_stream << "show_frames_tracking=" + boolToString(_conf.show_frames_tracking) + "\n";
-    info_stream << "skip_frames_tracking=" << _conf.skip_frames_tracking <<  "\n";
     info_stream << "skip_frames_volume=" << _conf.skip_frames_volume << "\n";
     info_stream << "left_border_volume=" << _conf.left_border_volume << "\n";
     info_stream << "right_border_volume=" << _conf.right_border_volume << "\n";
@@ -461,7 +415,9 @@ int Analyzer::analyze(int _num_droplets)
         countDroplets();
         measureInterDropletDistances();
         getSpeeds();
-        showAllMovementVectors();
+
+        if (config.show_frames_displacement)
+            showAllMovementVectors();
 
         std::cout << "Analysis finished, writing results to file" << std::endl;
         log_file << "Analysis finished, writing results to file" << "\n";
@@ -485,14 +441,13 @@ void Analyzer::clear()
 {
     droplet_ellipses.clear();
     displacement_vectors.clear();
-    droplet_tracks.clear();
     volumes.clear();
     num_droplets = 0;
 }
 
 int Analyzer::getNumDroplets() const
 {
-    return num_droplets;
+    return num_droplets + num_droplets_frozen;
 }
 
 std::vector<cv::Mat> Analyzer::applyNetToFrame(const cv::Mat& _frame)
@@ -640,7 +595,7 @@ void Analyzer::showAllMovementVectors()
             cv::line(preview_image, curr_point, displaced_point, cv::Scalar(rng.uniform(0,255), rng.uniform(0,rng.uniform(0,255)), 255), 1);
         }
     }
-    cv::imshow("Disp Vectors", preview_image);
+    cv::imshow("Displacement Vectors", preview_image);
     cv::waitKey();
 }
 

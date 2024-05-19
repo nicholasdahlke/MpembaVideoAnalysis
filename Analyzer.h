@@ -22,12 +22,11 @@ public:
     ~Analyzer();
     struct analysisConfig
     {
-        bool show_frames_droplets = true;
-        bool show_frames_displacement = true;
+        bool show_frames_droplets = false;
+        bool show_frames_displacement = false;
+        bool show_displacement_vectors = false;
         int right_border_displacement = 1e6;
         float max_movement_threshold_displacement = 1e4;
-        bool show_frames_tracking = false;
-        int skip_frames_tracking = 0;
         int skip_frames_volume = 0;
         int left_border_volume = 0;
         int right_border_volume = 1e4;
@@ -74,7 +73,6 @@ private:
     // Analysis results
     std::vector<std::vector<Droplet>> droplet_ellipses;
     std::vector<std::vector<Displacement>> displacement_vectors;
-    std::vector<std::vector<cv::Point_<float>>> droplet_tracks; // Untested
     std::vector<double> volumes;
     std::vector<double> distances;
     std::vector<double> speeds;
@@ -107,7 +105,6 @@ private:
     int getDropletsFromVideo(int _num_droplets);
     int getDisplacementVectors();
     int getSpeeds();
-    int trackDroplet(); // Untested
     int getVolumeFromDroplets();
     static double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
