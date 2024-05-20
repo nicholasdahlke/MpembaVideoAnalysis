@@ -1,7 +1,6 @@
 import mpemba
 import datetime
 import sys
-from PyQt5.QtWidgets import *
 
 
 if __name__ == '__main__':

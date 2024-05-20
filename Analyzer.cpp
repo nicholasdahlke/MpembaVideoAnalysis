@@ -102,6 +102,8 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
             if(!skip_droplet)
             {
                 cv::Mat droplet_roi = current_frame(detection);
+                cv::imshow("Droplet ROI",  droplet_roi); // TODO: Remove this function
+                cv::imwrite(volume_images_path.string() + "droplet_roi_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", droplet_roi); // TODO: Also remove this
                 cv::adaptiveThreshold(droplet_roi, droplet_roi, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 21, 2);
                 cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
                 cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
