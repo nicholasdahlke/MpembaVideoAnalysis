@@ -88,7 +88,7 @@ class Experiment:
         self.time_executed = time_executed
         self.video_filename = video_filename
         self.filedict = {
-            "droplet_volume": "",
+            "droplet_volumes": "",
             "droplet_count": "",
             "droplet_distance": "",
             "droplet_speed": "",
@@ -126,6 +126,7 @@ class Experiment:
                     reader = csv.reader(csvfile, delimiter=';')
                     for row in reader:
                         file_content.append(float(row[1]))
+
                 if len(file_content) == 0:
                     self.filedict[file_key] = ""
                 else:
@@ -136,8 +137,9 @@ class Experiment:
             return None
 
         match file_key:
-            case "droplet_volume":
-                return scipy.stats.mode(self._contentdict["droplet_volume"])[0]
+            case "droplet_volumes":
+                #return scipy.stats.mode(self._contentdict["droplet_volumes"])[0]
+                return np.median(self._contentdict["droplet_volumes"])
 
             case "droplet_count":
                 return self._contentdict["droplet_count"][0]
@@ -146,7 +148,7 @@ class Experiment:
                 return scipy.stats.mode(self._contentdict["droplet_distance"])[0]
 
             case "droplet_speed":
-                return scipy.stats.mode(self._contentdict["droplet_speed"])[0]
+                return scipy.stats.mode(self._contentdict["droplet_speed"])[0] * self.setup.frames_per_second
 
             case "droplet_count_frozen":
                 return self._contentdict["droplet_count_frozen"][0]
@@ -210,7 +212,7 @@ class ResultsCalculator:
     def __init__(self, experiment: Experiment, supercooling_time: float):
         self._experiment = experiment
         self._supercooling_time = supercooling_time
-        self.volume = self._experiment.get_file_content("droplet_volume")
+        self.volume = self._experiment.get_file_content("droplet_volumes")
         self.time = self._supercooling_time
         self.unfrozen_count = self._experiment.get_file_content("droplet_count")
         self.total_count = self._experiment.get_file_content("droplet_count") + self._experiment.get_file_content(
@@ -235,8 +237,9 @@ class SupercoolingCorrector:
         return self._simulation_results.time_steps[np.abs(self._simulation_results.results - cutoff).argmin()]
 
     def _get_cooler_exit_time(self):
-        return self._simulation_results.time_steps[np.abs(self._simulation_results.time_steps - (
-                self._experimental_setup.cooler_length / self.droplet_speed)).argmin()]
+        #return self._simulation_results.time_steps[np.abs(self._simulation_results.time_steps - (
+        #        self._experimental_setup.cooler_length / self.droplet_speed)).argmin()]
+        return self._experimental_setup.cooler_length / self.droplet_speed
 
     def _get_temp_reached_time(self):
         diff = 0.5
@@ -256,7 +259,7 @@ class ErrorCalculator:
         self._experiment = experiment
         self._supercooling_error = supercooling_error
         self._supercooling_time = supercooling_time
-        self.volume = self._experiment.get_file_content("droplet_volume")
+        self.volume = self._experiment.get_file_content("droplet_volumes")
         self.time = self._supercooling_time
         self.unfrozen_count = self._experiment.get_file_content("droplet_count")
         self.total_count = self._experiment.get_file_content("droplet_count") + self._experiment.get_file_content(
@@ -280,7 +283,7 @@ class ErrorCalculator:
 
     def get_error(self, method="linear"):
         if self.volume_error == 0:
-            self.volume_error = np.std(self._experiment.get_file_content("droplet_volume"))
+            self.volume_error = np.std(self._experiment.get_file_content("droplet_volumes"))
         match method:
             case "linear":
                 self._linear()
