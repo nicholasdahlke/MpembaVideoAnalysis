@@ -56,6 +56,8 @@ int main(int argc, char* argv[]) {
     analyzer.openCapture();
     analyzer.configure(config);
     int return_code;
+
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     if (parser.has("frame-amount"))
     {
         int num_frames = parser.get<int>("frame-amount");
@@ -65,7 +67,8 @@ int main(int argc, char* argv[]) {
     {
         return_code = analyzer.analyze();
     }
-
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::cout << "Analysis time:" << std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count() << "s\n";
     int count = analyzer.getNumDroplets();
     std::cout << "Counted " << count << " droplets" << std::endl;
     std::cout << std::scientific <<  "Calibration constant:" << calib_constant << std::endl;

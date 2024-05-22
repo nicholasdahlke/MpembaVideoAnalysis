@@ -10,12 +10,12 @@
 class Detection {
 public:
     Detection(cv::Rect _rect, std::string _detection_type, float _confidence);
-
     cv::Rect getRect();
-
     std::string getDetectionType();
-
     float getConfidence();
+    bool operator==(Detection const& a);
+    bool operator!=(Detection const& a);
+
 
 
 private:

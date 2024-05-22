@@ -6,9 +6,11 @@
 #include <iostream>
 #include <chrono>
 #include <sstream>
-#include <opencv2/bgsegm.hpp>
 #include <cmath>
+#include <opencv2/bgsegm.hpp>
 #include <opencv2/intensity_transform.hpp>
+#include <opencv2/photo.hpp>
+
 
 Analyzer::Analyzer(const std::filesystem::path& _filename, const std::filesystem::path& _net_filename)
 {
@@ -83,55 +85,126 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
         int volume_droplet_nr = 0;
         for (Detection detection_obj : detections)
         {
-            cv::Rect detection = enlargeRect(detection_obj.getRect(), 1.2); //Enlarge rectangle to avoid problematic collisions with borders
+            cv::Rect detection = enlargeRect(detection_obj.getRect(),
+                                             1.2); //Enlarge rectangle to avoid problematic collisions with borders
             cv::rectangle(current_annotated, detection, cv::Scalar(0, 255, 0), 2);
-            bool skip_droplet = false; //temp
-            if(detection.x < 0)
-                skip_droplet = true;
-            if(detection.y < 0)
-                skip_droplet = true;
-            if(detection.x + detection.width > video_width)
-                skip_droplet = true;
-            if(detection.y + detection.height > video_height)
-                skip_droplet = true;
-            int x_offset = detection.x;
-            int y_offset = detection.y;
-            std::cout << "ROI x" << std::to_string(detection.x) << "\n";
-            std::cout << "ROI y" << std::to_string(detection.y) << "\n";
-            std::vector<std::vector<cv::Point>> contours;
-            if(!skip_droplet)
+            bool skip_droplet = false;
             {
-                cv::Mat droplet_roi = current_frame(detection);
-                cv::adaptiveThreshold(droplet_roi, droplet_roi, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 21, 2);
-                cv::morphologyEx(droplet_roi, droplet_roi, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)), cv::Point(-1, -1), 1);
-                cv::findContours(droplet_roi, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0,0));
-                double max_drop_area = std::numbers::pi * detection.height * detection.width * 0.5;
-                contours = filterContours(contours, max_drop_area);
-                // Shift contours
-                for(std::vector<cv::Point>& contour: contours)
+                // Check if droplet is inside borders
+                if (detection.x < config.left_border_volume)
+                    skip_droplet = true;
+                if (detection.y < 0)
+                    skip_droplet = true;
+                if (detection.x + detection.width > video_width)
+                    skip_droplet = true;
+                if (detection.y + detection.height > video_height)
+                    skip_droplet = true;
+            }
+            {
+                // Check for intersecting droplets
+                for (Detection detection1 : detections)
                 {
-                    for(cv::Point& point : contour)
+                    if(detection1 != detection_obj)
                     {
-                        point.x += x_offset;
-                        point.y += y_offset;
+                        if ((enlargeRect(detection1.getRect(), 1.2) & detection).area() > 0)
+                        {
+                            skip_droplet = true;
+                            std::cout << "Skipping droplets because it intersects another" << "\n";
+                            log_file << "Skipping droplets because it intersects another" << "\n";
+                        }
                     }
                 }
-                cv::drawContours(current_annotated, contours, -1, cv::Scalar(255, 125, 0));
             }
-            if(contours.size() == 2 && !skip_droplet)
-            {//This case is executed if it is possible to fit an ellipse
-                std::vector<cv::Point> max_contour = contours.front();
-                if (cv::contourArea(contours.front()) < cv::contourArea(contours.back()))
-                    max_contour = contours.back();
-                std::vector<std::vector<cv::Point>> cont_vec;
-                cv::RotatedRect drop_ellipse = cv::fitEllipse(max_contour);
-                ellipses.emplace_back(drop_ellipse, true, detection_obj.getDetectionType() == dnn_classes[1]);
-                cv::Mat temp_annot = current_annotated.clone();
-                cv::ellipse(temp_annot, drop_ellipse, cv::Scalar(0, 255, 255));
-                cv::imwrite(volume_images_path.string() + "droplet_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", temp_annot(detection));
-                volume_droplet_nr++;
+
+            int x_offset = detection.x;
+            int y_offset = detection.y;
+            if (!skip_droplet)
+            {
+                std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+                cv::Mat droplet_roi = current_frame(detection); // Get detection ROI from image
+                cv::fastNlMeansDenoising(droplet_roi, droplet_roi, 10, 7, 21); // Denoise image
+                cv::Mat grabcut_input;
+                float downsampling_factor = 0.5;
+                cv::resize(droplet_roi, grabcut_input, cv::Size(0, 0), downsampling_factor, downsampling_factor); // Downscale image for faster grabcut performance
+
+                cv::cvtColor(grabcut_input, grabcut_input, cv::COLOR_GRAY2BGR); // Convert grayscale image to color (necessary for grabcut)
+                float scaling_factor = 0.9;
+                cv::Mat bgdModel;
+                cv::Mat fgdModel;
+                cv::Mat outMask;
+                cv::Rect grabcut_rect;
+
+                // Define the rectangle containing the droplet
+                grabcut_rect.x = (grabcut_input.size[0] * (1 - scaling_factor))/2;
+                grabcut_rect.y = (grabcut_input.size[1] * (1 - scaling_factor))/2;
+                grabcut_rect.height = grabcut_input.size[0] * scaling_factor;
+                grabcut_rect.width = grabcut_input.size[1] * scaling_factor;
+
+                // Apply the grabcut algorithm
+                cv::grabCut(grabcut_input,
+                            outMask,
+                            grabcut_rect,
+                            bgdModel,
+                            fgdModel,
+                            5,
+                            cv::GC_INIT_WITH_RECT);
+
+                // Create a lookup table to use the grabcut mask
+                cv::Mat lookUpTable(1, 256, CV_8U);
+                uint8_t * p = lookUpTable.data;
+                for(size_t j = 0; j < 256; ++j)
+                {
+                    p[j] = 255;
+                }
+                p[0] = 0;
+                p[2] = 0;
+                cv::LUT(outMask, lookUpTable, outMask);
+
+                // Scale mask to original size
+                cv::resize(outMask, outMask, cv::Size(0, 0), 1/downsampling_factor, 1/downsampling_factor);
+
+                std::vector<std::vector<cv::Point>> contours;
+                cv::findContours(outMask, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+
+                std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+
+                std::cout << "Applied grabcut algorithm on frame " << volume_image_nr << " droplet " << volume_droplet_nr << " in " <<std::chrono::duration_cast<std::chrono::milliseconds>(t2 -t1).count() << "ms\n";
+                log_file << "Applied grabcut algorithm on frame " << volume_image_nr << " droplet " << volume_droplet_nr << " in " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 -t1).count() << "ms\n";
+
+                if (!contours.empty())
+                {
+                    // Find largest contour
+                    std::vector<cv::Point> contour = *std::max_element(contours.begin(),
+                                                                       contours.end(),
+                                                                       [](const std::vector<cv::Point> &a,
+                                                                          const std::vector<cv::Point> &b) -> bool {
+                                                                           return cv::contourArea(a) <
+                                                                                  cv::contourArea(b);
+                                                                       });
+
+                    if(contour.size() > 5) // Check if enough points are present
+                    {
+                        // Fit an ellipse
+                        cv::RotatedRect ellipse_fit = cv::fitEllipse(contour);
+
+                        // Shift the ellipse back to the original position
+                        ellipse_fit.center.x += x_offset;
+                        ellipse_fit.center.y += y_offset;
+
+                        ellipses.emplace_back(ellipse_fit, true, detection_obj.getDetectionType() == dnn_classes[1]);
+                    }
+                    else
+                    {
+                        skip_droplet = true;
+                    }
+                }
+                else
+                {
+                    skip_droplet = true;
+                }
             }
-            else
+
+            if (skip_droplet)
             {
                 int width = detection.width;
                 int height = detection.height;
@@ -149,10 +222,9 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
                     color = cv::Scalar(0, 255, 0);
                 cv::ellipse(current_annotated, droplet.getEllipse(), color);
             }
-            std::cout << "Frame end\n\n";
             cv::imshow("Frames", current_annotated);
-            cv::waitKey(500);
-            //cv::imwrite(volume_images_path.string() + "annotated_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", current_annotated);
+            cv::waitKey(1);
+            cv::imwrite(volume_images_path.string() + "annotated_" + std::to_string(volume_image_nr) + "_" + std::to_string(volume_droplet_nr) + ".jpg", current_annotated);
         }
         droplet_ellipses.push_back(ellipses);
         volume_image_nr++;
@@ -161,30 +233,6 @@ int Analyzer::getDropletsFromVideo(int _num_droplets)
     return 0;
 }
 
-std::vector<std::vector<cv::Point>> Analyzer::filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_area)
-{
-    std::vector<std::vector<cv::Point>> filtered_contours;
-    std::vector<double> contour_areas;
-    for (const std::vector<cv::Point>& contour : _contours)
-    {
-        if(contour.size() != 4)
-        {
-            filtered_contours.push_back(contour);
-            contour_areas.push_back(cv::contourArea(contour));
-        }
-    }
-    double contour_median_lower = 0.2 * getMedian(contour_areas);
-    std::vector<std::vector<cv::Point>>::iterator contour_it;
-    for(contour_it = filtered_contours.begin(); contour_it != filtered_contours.end();)
-    {
-        double contour_area = cv::contourArea(*contour_it);
-        if(contour_area < contour_median_lower || contour_area > _max_area)
-            contour_it = filtered_contours.erase(contour_it);
-        else
-            ++contour_it;
-    }
-    return filtered_contours;
-}
 
 int Analyzer::getDisplacementVectors()
 {
