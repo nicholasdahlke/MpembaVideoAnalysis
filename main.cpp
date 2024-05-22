@@ -49,13 +49,15 @@ int main(int argc, char* argv[]) {
     config.calib = calib_constant;
     config.skip_frames_volume = 0;
     config.x_threshold_count = 810;
-    config.show_frames_droplets = true;
+    config.show_frames_droplets = false;
     config.show_frames_displacement = false;
     config.right_border_displacement = 1800;
     config.confidence_threshold = 0.7;
     analyzer.openCapture();
     analyzer.configure(config);
     int return_code;
+
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     if (parser.has("frame-amount"))
     {
         int num_frames = parser.get<int>("frame-amount");
@@ -65,7 +67,8 @@ int main(int argc, char* argv[]) {
     {
         return_code = analyzer.analyze();
     }
-
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::cout << "Analysis time:" << std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count() << "s\n";
     int count = analyzer.getNumDroplets();
     std::cout << "Counted " << count << " droplets" << std::endl;
     std::cout << std::scientific <<  "Calibration constant:" << calib_constant << std::endl;

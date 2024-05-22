@@ -5,10 +5,7 @@ import sys
 
 if __name__ == '__main__':
 
-    file_list = ["/home/nicholas/Mpempa Videos/Ergebnisse/res1.cf",
-                 "/home/nicholas/Mpempa Videos/Ergebnisse/res2.cf",
-                 "/home/nicholas/Mpempa Videos/Ergebnisse/res3.cf",
-                 "/home/nicholas/Mpempa Videos/Ergebnisse/res4.cf"]
+    file_list = ["/home/nicholas/Mpempa Videos/Unprocessed/res1.cf"]
     for file in file_list:
         case = mpemba.readExperiment(file)
         exp_setup = case[0]
@@ -28,13 +25,13 @@ if __name__ == '__main__':
         super_time = supercorrector.get_supercooling_time()
         super_error = supercorrector.get_supercooling_error()
         res_calculator = mpemba.ResultsCalculator(exp, super_time)
-        volume = 1.41338e-10
-        res_calculator.volume = volume
+        #volume = 1.41338e-10
+        #res_calculator.volume = volume
         nucleation_rate = res_calculator.get_nucleation_rate()
         mpemba.printSci(nucleation_rate, "Nucleation rate")
         error_calculator = mpemba.ErrorCalculator(exp, super_time, super_error, nucleation_rate)
         error_calculator.volume_error = 1.863407635991848e-12
-        error_calculator.volume = volume
+        #error_calculator.volume = volume
         error = error_calculator.get_error("nonlinear")
         mpemba.printSci(error[1], "Positive error")
         mpemba.printSci(error[0], "Negative error")

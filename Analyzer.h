@@ -28,7 +28,7 @@ public:
         int right_border_displacement = 1e6;
         float max_movement_threshold_displacement = 1e4;
         int skip_frames_volume = 0;
-        int left_border_volume = 0;
+        int left_border_volume = 5;
         int right_border_volume = 1e4;
         int x_threshold_count = 20;
         double calib = 1.0;
@@ -109,7 +109,6 @@ private:
     static double getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib);
     int countDroplets();
     int measureInterDropletDistances();
-    std::vector<std::vector<cv::Point>> filterContours(const std::vector<std::vector<cv::Point>>& _contours, double _max_drop_area);
 };
 
 

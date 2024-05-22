@@ -25,3 +25,13 @@ float Detection::getConfidence()
 {
     return confidence;
 }
+
+bool Detection::operator==(const Detection &a)
+{
+    return (a.confidence == confidence) && (a.detection_type == detection_type) && (a.rect == rect);
+}
+
+bool Detection::operator!=(const Detection &a)
+{
+    return (a.confidence != confidence) || (a.detection_type != detection_type) || (a.rect != rect);
+}

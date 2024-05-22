@@ -67,7 +67,7 @@ def readExperiment(filename: str):
     inner_radius_tubing = float(toml_dict["data"]["inner_radius_tubing"])
     outer_radius_tubing = float(toml_dict["data"]["outer_radius_tubing"])
     water_density = float(toml_dict["data"]["water_density"])
-    data_recorded = datetime.datetime.strptime(toml_dict["data"]["date_recorded"], '%Y-%m-%d %H:%M:%S')
+    data_recorded = toml_dict["data"]["date_recorded"]
     r_exp_setup = ExperimentalSetup(flow_rate_oil_ul=flow_rate_oil_ul,
                                     flow_rate_water_ul=flow_rate_water_ul,
                                     frames_per_second=frames_per_second,
