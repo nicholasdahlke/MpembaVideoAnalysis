@@ -31,7 +31,6 @@ Window::Window(QWidget *parent) : QWidget(parent)
     run_video_button->setStyleSheet("color: rgb(0, 255, 0)");
     run_evaluation_button = new QPushButton("Run data evaluation");
     run_evaluation_button->setStyleSheet("color: rgb(0, 255, 0)");
-    run_evaluation_button->setEnabled(false);
     generate_case_files_button = new QPushButton("Generate case files");
     status_label = new QLabel("Idle");
     status_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
