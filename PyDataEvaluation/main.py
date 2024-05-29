@@ -4,7 +4,7 @@ import os
 
 if __name__ == '__main__':
     file_list = sys.argv
-    file_list.pop(0) # Remove the code from the argument list
+    file_list.pop(0)  # Remove the code from the argument list
     for file in file_list:
         if not os.path.isfile(file):
             raise Exception("One of the provided case files does not exist.")
@@ -29,6 +29,7 @@ if __name__ == '__main__':
         super_error = supercorrector.get_supercooling_error()
         res_calculator = mpemba.ResultsCalculator(exp, super_time)
         nucleation_rate = res_calculator.get_nucleation_rate()
+        mpemba.printSci(super_time, "Supercooling time")
         mpemba.printSci(nucleation_rate, "Nucleation rate")
         error_calculator = mpemba.ErrorCalculator(exp, super_time, super_error, nucleation_rate)
         error = error_calculator.get_error("nonlinear")

@@ -14,6 +14,16 @@ Window::Window(QWidget *parent) : QWidget(parent)
     // Create UI Objects
     window_layout = new QGridLayout();
 
+    QPixmap ae_logo_pixmap("/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/GUI/ae_logo.png");
+    ae_logo = new QLabel();
+    ae_logo->setPixmap(ae_logo_pixmap.scaledToHeight(100));
+
+    title = new QLabel("Mpæmba \n Data evaluation and video analysis");
+    QFont title_font = title->font();
+    title_font.setBold(true);
+    title_font.setPointSize(20);
+    title->setFont(title_font);
+
     video_open_button = new QPushButton("Open video");
     case_open_button = new QPushButton("Open case");
     case_open_button->setEnabled(false);
@@ -57,15 +67,17 @@ Window::Window(QWidget *parent) : QWidget(parent)
     properties_tab->addTab(runProperties, "Run properties");
 
     // Arrange layout
-    window_layout->addWidget(video_open_button, 0, 0, 1, 1);
-    window_layout->addWidget(case_open_button, 0, 1, 1, 1);
-    window_layout->addWidget(file_table, 1, 0, 3, 3);
-    window_layout->addWidget(update_button, 4, 0, 1, 3);
-    window_layout->addWidget(properties_tab, 5, 0, 4, 3);
-    window_layout->addWidget(generate_case_files_button, 9, 0, 1, 1);
-    window_layout->addWidget(run_video_button, 10, 0, 1, 1);
-    window_layout->addWidget(run_evaluation_button, 10, 1, 1, 1);
-    window_layout->addWidget(status_label, 10, 2, 1, 1);
+    window_layout->addWidget(title, 0, 0, 1, 1);
+    window_layout->addWidget(ae_logo, 0, 2, 1, 1);
+    window_layout->addWidget(video_open_button, 3, 0, 1, 1);
+    window_layout->addWidget(case_open_button, 3, 1, 1, 1);
+    window_layout->addWidget(file_table, 4, 0, 3, 3);
+    window_layout->addWidget(update_button, 7, 0, 1, 3);
+    window_layout->addWidget(properties_tab, 8, 0, 4, 3);
+    window_layout->addWidget(generate_case_files_button, 12,0, 1, 1);
+    window_layout->addWidget(run_video_button, 13, 0, 1, 1);
+    window_layout->addWidget(run_evaluation_button, 13, 1, 1, 1);
+    window_layout->addWidget(status_label, 13, 2, 1, 1);
 
     // Set layout
     setLayout(window_layout);

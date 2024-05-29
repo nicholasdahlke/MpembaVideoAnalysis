@@ -16,6 +16,9 @@
 #include <QFileDialog>
 #include <QMetaType>
 #include <QTextEdit>
+#include <QPixmap>
+#include <QFont>
+#include <QBitmap>
 #include <QtConcurrent/QtConcurrent>
 #include <QThread>
 #include <QProcess>
@@ -37,6 +40,9 @@ class Window : public QWidget
 
     private:
         QGridLayout *window_layout;
+
+        QLabel *ae_logo;
+        QLabel *title;
 
         QPushButton *video_open_button;
         QPushButton *case_open_button;
