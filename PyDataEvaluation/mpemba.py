@@ -4,7 +4,7 @@ import csv
 import numpy as np
 from dataclasses import dataclass
 import scipy
-import tomllib
+import toml
 
 
 @dataclass
@@ -54,8 +54,8 @@ def print_(value, name: str, precision: int = 3):
 
 
 def readExperiment(filename: str):
-    with open(filename, "rb") as toml:
-        toml_dict = tomllib.load(toml)
+    with open(filename, "r") as toml_file:
+        toml_dict = toml.loads(toml_file.read())
     video_filename = toml_dict["data"]["video"]
     flow_rate_oil_ul = float(toml_dict["data"]["flow_rate_oil_ul"])
     flow_rate_water_ul = float(toml_dict["data"]["flow_rate_water_ul"])

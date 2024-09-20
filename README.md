@@ -79,3 +79,6 @@ Die Software ist nun in dem Ordner `Release` als ausführbare Datei `MpembaVideo
 
 3. *venv* aktivieren
     `source .venv/bin/activate`
+
+4. Abhängigkeiten installieren
+   `pip install -r requirements.txt`
