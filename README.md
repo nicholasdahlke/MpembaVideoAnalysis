@@ -9,7 +9,7 @@ In der Videoanalyse werden dabei je ein Video eingelesen und ausgewertet. Hierbe
 
 Diese Informationen werden in mehrere *.csv* Dateien exportiert, die jeweils anhand von Videodateiname und dem ausgegebenen Parameter benannt werden.
 
-Die weitere Analyse erfolgt in einer Python-Software. Die erforderlichen Daten werden dazu über eine Datei angegeben. 
+Die weitere Analyse erfolgt in einer Python-Software. Die erforderlichen Daten werden dazu über eine Datei (Case-File) angegeben. 
 Beispielhaft ist die Struktur einer Datei dargestellt:
 
 
@@ -114,3 +114,22 @@ Die Einheit mm darf nicht mit angegeben werden.
 ![test](./Images/img2.png)
 
 Nachdem dieses Feld mit Ok bestätigt wird, wird die Software automatisch ausgeführt und beendet sich automatisch nach Abarbeiten aller Dateien.
+
+Werden mehrere Dateien bearbeitet, so muss nach Ablauf der ersten Datei der angezeigte Kalibrationswert eingegeben werden.
+![test](./Images/img5.png)
+
+Danach werden automatisch die Ausgabe-Dateien erstellt.
+
+Diese befinden sich im selben Ordner wie die Videodatei, es empfiehlt sich also für jeden Durchlauf einen neuen Ordner zu erstellen.
+
+Zur weiteren Verarbeitung sollte also als nächster Schritt in den [TestData](TestData) Ordner gewechselt werden.
+
+`cd ../TestData`
+
+Hier liegt bereits ein passendes Case-File für das Beispielvideo vor, ansonsten müssen diese aktuell noch manuell erstellt werden.
+Die Datenanalyse kann daher mit `python3 ../PyDataEvaluation/main.py case_file1.cf` gestartet werden.
+
+Die Ausgabe im Terminal ist nun das finale Resultat. 
+![test](./Images/img6.png)
+
+Interessant ist hier vor allem die Nukleationsrate, dieser Parameter ist bisher nur sehr kompliziert und ungenau bestimmbar, was durch diesen Aufbau deutlich verbessert wird.

@@ -3,7 +3,7 @@ FILES=`zenity --file-selection --title="Select video files for analysis" --multi
 zenity --question --text="Flip videos horizontally?"
 FLIP_HORIZ=$?
 IS_CALIBRATED=0
-NETFILE="/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/multiphase.onnx"
+NETFILE="/mnt/md0/Progammiersoftwareprojekte/CLionProjects/MpembaVideoAnalysis/AI Models/multiphase.onnx"
 CALIB_VALUE=""
 while IFS="|" read -ra FILES; do
     for i in "${FILES[@]}"; do
