@@ -33,7 +33,7 @@ Dazu werden diese als Argument angegeben.
 
 ## Installation
 Allgemeine Installation der Abhängigkeiten auf Ubuntu:
-`sudo apt install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libopencv-dev python3 python3-pip python3-venv`
+`sudo apt install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libopencv-dev python3 python3-pip python3-venv zenity`
 
 ### C++ Videoanalyesoftware
 1. Klonen des Github-Repository mit dem Code
@@ -74,11 +74,43 @@ Die Software ist nun in dem Ordner `Release` als ausführbare Datei `MpembaVideo
 
 
 2. Python *venv* erstellen
+
     `python3 -m venv .venv`
 
 
 3. *venv* aktivieren
+
     `source .venv/bin/activate`
 
+
 4. Abhängigkeiten installieren
+
    `pip install -r requirements.txt`
+
+Die Software kann nun mit `python3 main.py <casefiles>` ausgeführt werden
+
+## Nutzung der Software
+Die Software wird über ein Bash-Script aufgerufen, welches die simplere Abarbeitung von mehreren Videodateien ermöglicht.
+Nach der Installation wird dazu in den [Scripts](Scripts) Ordner gewechselt
+
+`cd ../Scripts`
+
+Mit `./analysis.sh` kann dann die Videoanalyse geöffnet werden 
+Es öffnet sich anschließend ein Fenster, in welchem die zu analysierenden Datein ausgewählt werden können.
+![test](./Images/img1.png)
+In dem Ordner [TestData](TestData) ist eine Beispiel-Videodatei bereitgestellt.
+
+Anschließend erfolgt eine Nachfrage ob das Video horizontal gespiegelt werden soll.
+Dies ist nur notwendig, wenn die Tröpfchen nicht nach rechts fließen, bei dem Beispielvideo also nicht.
+![test](./Images/img4.png)
+
+In dem sich daraufhin öffnenden Fenster muss zur Längenkalibrierung ein Rechteck, mithilfe der Schieberegler, an die Außenwand des Schlauches angepasst werden.
+Dies ist auch im Bild dargestellt.
+![test](./Images/img3.png)
+Diese Auswahl wird mit <kbd>ENTER</kbd> bestätigt.
+
+In dem folgenden Feld muss die reale Länge der ausgewählten Schlauchsektion angegeben werden. Diese ist hier 1/16", es muss also 1.5875 in das Dialogfeld eingegeben werden.
+Die Einheit mm darf nicht mit angegeben werden.
+![test](./Images/img2.png)
+
+Nachdem dieses Feld mit Ok bestätigt wird, wird die Software automatisch ausgeführt und beendet sich automatisch nach Abarbeiten aller Dateien.
