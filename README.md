@@ -33,17 +33,27 @@ Dazu werden diese als Argument angegeben.
 
 ## Installation
 Allgemeine Installation der Abhängigkeiten auf Ubuntu:
-`sudo apt install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libopencv-dev python3 python3-pip python3-venv zenity`
+`sudo apt install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libopencv-dev python3 python3-pip python3-venv zenity wget zip`
 
 ### C++ Videoanalyesoftware
-1. Klonen des Github-Repository mit dem Code
+1. Entpacken der Software
     
-    `git clone https://github.com/nicholasdahlke/MpembaVideoAnalysis.git`
+    `unzip mpemba.zip`
 
 
-2. In den Ordner mit dem C++ Code wechseln
+2. In den Ordner mit der Software wechseln
 
-    `cd MpembaVideoAnalysis/VideoAnalysis`
+    `cd MpembaVideoAnalysis`
+
+
+3. Selbsttrainiertes KI-Model herunterladen
+
+   `wget https://github.com/nicholasdahlke/MpembaVideoAnalysis/raw/refs/heads/master/AI%20Models/multiphase.onnx -P "AI Models"`
+
+
+4. In den Ordner mit dem C++ Code wechseln
+
+   `cd VideoAnalysis`
 
 
 3. Einen Build-Ordner erstellen
