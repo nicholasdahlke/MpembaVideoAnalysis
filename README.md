@@ -33,15 +33,49 @@ Dazu werden diese als Argument angegeben.
 
 ## Installation
 Allgemeine Installation der Abhängigkeiten auf Ubuntu:
-`sudo apt install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libopencv-dev python3 python3-pip`
+`sudo apt install build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libopencv-dev python3 python3-pip python3-venv`
 
 ### C++ Videoanalyesoftware
-`git clone https://github.com/nicholasdahlke/MpembaVideoAnalysis.git`
+1. Klonen des Github-Repository mit dem Code
+    
+    `git clone https://github.com/nicholasdahlke/MpembaVideoAnalysis.git`
 
-`cd MpembaVideoAnalysis/VideoAnalysis`
 
-`mkdir Release`
+2. In den Ordner mit dem C++ Code wechseln
 
-`cd Release`
+    `cd MpembaVideoAnalysis/VideoAnalysis`
 
-`cmake -DCMAKE_BUILD_TYPE=Release ..`
+
+3. Einen Build-Ordner erstellen
+
+    `mkdir Release`
+
+
+4. In den Build-Ordner wechseln
+
+    `cd Release`
+
+
+5. Build Dateien mit *cmake* erstellen
+
+    `cmake -DCMAKE_BUILD_TYPE=Release ..`
+
+
+6. Projekt kompillieren
+
+    `make`
+
+Die Software ist nun in dem Ordner `Release` als ausführbare Datei `MpembaVideoAnalysis` zu finden.
+
+### Python Auswertungssoftware
+1. In den Python-Ordner wechseln
+
+   `cd ../../PyDataEvaluation`
+
+
+2. Python *venv* erstellen
+    `python3 -m venv .venv`
+
+
+3. *venv* aktivieren
+    `source .venv/bin/activate`
