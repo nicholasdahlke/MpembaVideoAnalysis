@@ -2,8 +2,6 @@ import mpemba
 import sys
 import os
 
-from PyDataEvaluation.mpemba import Results
-
 if __name__ == '__main__':
     file_list = sys.argv
     file_list.pop(0)  # Remove the code from the argument list

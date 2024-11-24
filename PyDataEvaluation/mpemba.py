@@ -5,6 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 import scipy
 import toml
+import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -103,6 +104,9 @@ class Experiment:
 
         self._set_filenames()
         self._read_files()
+        #plt.figure()
+        #plt.hist(self._contentdict["droplet_speed"] * self._setup.frames_per_second, bins=100)
+        #plt.show()
 
     def _set_filenames(self):
         self._set_filename_check_if_exists("droplet_volumes", "-volumes.csv")
@@ -135,7 +139,6 @@ class Experiment:
     def get_file_content(self, file_key):
         if self._filedict[file_key] == "":
             return None
-
         match file_key:
             case "droplet_volumes":
                 #return scipy.stats.mode(self._contentdict["droplet_volumes"])[0]
@@ -148,7 +151,8 @@ class Experiment:
                 return scipy.stats.mode(self._contentdict["droplet_distance"])[0]
 
             case "droplet_speed":
-                return scipy.stats.mode(self._contentdict["droplet_speed"])[0] * self._setup.frames_per_second
+                #return scipy.stats.mode(self._contentdict["droplet_speed"])[0] * self._setup.frames_per_second
+                return scipy.stats.tmean(self._contentdict["droplet_speed"]* self._setup.frames_per_second, limits=(0.005, None))
 
             case "droplet_count_frozen":
                 return self._contentdict["droplet_count_frozen"][0]
