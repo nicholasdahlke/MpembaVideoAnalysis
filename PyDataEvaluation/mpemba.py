@@ -78,16 +78,16 @@ def readExperiment(filename: str):
                                     inner_radius_tubing=inner_radius_tubing,
                                     outer_radius_tubing=outer_radius_tubing,
                                     water_density=water_density)
-    return r_exp_setup, data_recorded, video_filename
+    return r_exp_setup, data_recorded, video_filename, toml_dict
 
 
 class Experiment:
     def __init__(self, video_filename: str, setup: ExperimentalSetup, time_executed: datetime.datetime):
 
-        self.setup = setup
-        self.time_executed = time_executed
-        self.video_filename = video_filename
-        self.filedict = {
+        self._setup = setup
+        self._time_executed = time_executed
+        self._video_filename = video_filename
+        self._filedict = {
             "droplet_volumes": "",
             "droplet_count": "",
             "droplet_distance": "",
@@ -98,7 +98,7 @@ class Experiment:
 
         self._contentdict = {}
 
-        for file_key in self.filedict:
+        for file_key in self._filedict:
             self._contentdict[file_key] = np.array([])
 
         self._set_filenames()
@@ -113,27 +113,27 @@ class Experiment:
         self._set_filename_check_if_exists("droplet_calibration", "-calibration.csv")
 
     def _set_filename_check_if_exists(self, file, addition):
-        vid_file_without_extension = self.video_filename.rsplit(".", 1)[0]
-        self.filedict[file] = vid_file_without_extension + addition
-        if not os.path.isfile(self.filedict[file]):
-            self.filedict[file] = ""
+        vid_file_without_extension = self._video_filename.rsplit(".", 1)[0]
+        self._filedict[file] = vid_file_without_extension + addition
+        if not os.path.isfile(self._filedict[file]):
+            self._filedict[file] = ""
 
     def _read_files(self):
-        for file_key in self.filedict:
-            if self.filedict[file_key] != "":
+        for file_key in self._filedict:
+            if self._filedict[file_key] != "":
                 file_content = []
-                with open(self.filedict[file_key], newline='') as csvfile:
+                with open(self._filedict[file_key], newline='') as csvfile:
                     reader = csv.reader(csvfile, delimiter=';')
                     for row in reader:
                         file_content.append(float(row[1]))
 
                 if len(file_content) == 0:
-                    self.filedict[file_key] = ""
+                    self._filedict[file_key] = ""
                 else:
                     self._contentdict[file_key] = np.array(file_content)
 
     def get_file_content(self, file_key):
-        if self.filedict[file_key] == "":
+        if self._filedict[file_key] == "":
             return None
 
         match file_key:
@@ -148,7 +148,7 @@ class Experiment:
                 return scipy.stats.mode(self._contentdict["droplet_distance"])[0]
 
             case "droplet_speed":
-                return scipy.stats.mode(self._contentdict["droplet_speed"])[0] * self.setup.frames_per_second
+                return scipy.stats.mode(self._contentdict["droplet_speed"])[0] * self._setup.frames_per_second
 
             case "droplet_count_frozen":
                 return self._contentdict["droplet_count_frozen"][0]
@@ -160,10 +160,12 @@ class Experiment:
                 return None
 
     def get_file_content_array(self, file_key):
-        if self.filedict[file_key] == "":
+        if self._filedict[file_key] == "":
             return None
         return self._contentdict[file_key]
 
+    def get_setup(self):
+        return self._setup
 
 class ThermalSimulation:
     def __init__(self, experimental_setup: ExperimentalSetup, simulation_parameters: SimulationParameters):
@@ -330,3 +332,53 @@ class ErrorCalculator:
         self._error_neg = self.nucleation_rate - nucleation_rate(self.time, self.unfrozen_count,
                                                                  self.total_count + self.total_error,
                                                                  self.volume + self.volume_error)
+
+
+class Results:
+    def __init__(self, case_file:str):
+        self._case_file = case_file
+        case = readExperiment(self._case_file)
+        self._toml_dict = case[3]
+        self._experiment = Experiment(case[2], case[0], case[1])
+        self._droplet_count = self._experiment.get_file_content("droplet_count")
+        self._droplet_count_frozen = self._experiment.get_file_content("droplet_count_frozen")
+        self._droplet_volume = self._experiment.get_file_content("droplet_volumes")
+        sim_parameters = SimulationParameters(1E-4, 1E-1)
+        sim = ThermalSimulation(self._experiment.get_setup(), sim_parameters)
+        sim.simulate()
+        sim_results = sim.get_results()
+        supercorrector = SupercoolingCorrector(self._experiment, sim_results, self._experiment.get_setup())
+        self._super_time = supercorrector.get_supercooling_time()
+        super_error = supercorrector.get_supercooling_error()
+        res_calculator = ResultsCalculator(self._experiment, self._super_time)
+        self._nucleation_rate = res_calculator.get_nucleation_rate()
+        error_calculator = ErrorCalculator(self._experiment, self._super_time, super_error, self._nucleation_rate)
+        error = error_calculator.get_error("nonlinear")
+        self._error_pos = error[1]
+        self._error_neg = error [0]
+
+    def print(self):
+        print_(self._experiment.get_setup().initial_temperature, "Initial temperature")
+        print_(self._experiment.get_setup().cooler_temperature, "Cooler temperature")
+        print_(self._droplet_count, "Unfrozen droplets")
+        print_(self._droplet_count_frozen, "Frozen droplets")
+        printSci(self._droplet_volume, "Droplet volume")
+        printSci(self._super_time, "Supercooling time")
+        printSci(self._nucleation_rate, "Nucleation rate")
+        printSci(self._error_pos, "Positive error")
+        printSci(self._error_neg, "Negative error")
+        print("-"*20)
+
+    def save(self):
+        new_toml = {"data":self._toml_dict["data"],"results":{
+            "droplets": self._droplet_count,
+            "droplets_frozen": self._droplet_count_frozen,
+            "droplet_volume": self._droplet_volume,
+            "supercooling_time": self._super_time,
+            "nucleation_rate": self._nucleation_rate,
+            "error_pos": self._error_pos,
+            "error_neg": self._error_neg
+        }}
+        case_file = open(self._case_file, "w")
+        case_file.write(toml.dumps(new_toml, encoder=toml.TomlNumpyEncoder()))
+        case_file.close()
