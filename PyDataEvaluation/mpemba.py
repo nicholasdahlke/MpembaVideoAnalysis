@@ -211,6 +211,8 @@ class ThermalSimulation:
         print("Finished simulation in {} iterations".format(iterations))
 
     def get_results(self):
+        #plt.plot(self._time_steps, self._simulation_results)
+        #plt.show()
         return SimulationResults(np.array(self._time_steps), np.array(self._simulation_results))
 
 
@@ -239,7 +241,7 @@ class SupercoolingCorrector:
         self.droplet_speed = self._experiment.get_file_content("droplet_speed")
 
     def _get_cutoff_time(self):
-        cutoff = -32
+        cutoff = self._experimental_setup.cooler_temperature + 7.0 # Use this parameter for setting the correction offset
         return self._simulation_results.time_steps[np.abs(self._simulation_results.results - cutoff).argmin()]
 
     def _get_cooler_exit_time(self):

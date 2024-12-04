@@ -11,5 +11,16 @@ add_executable(MpembaVideoAnalysis main.cpp Calibrator.cpp Calibrator.h Analyzer
         Droplet.cpp
         Droplet.h
         Detection.cpp
-        Detection.h)
+        Detection.h
+        FrameProcessor.cpp
+        FrameProcessor.h
+        Measurement.cpp
+        Measurement.h
+        AnalysisConfig.cpp
+        AnalysisConfig.h
+        Frame.cpp
+        Frame.h
+        Processor.cpp
+        Processor.h
+)
 target_link_libraries(MpembaVideoAnalysis ${OpenCV_LIBS})

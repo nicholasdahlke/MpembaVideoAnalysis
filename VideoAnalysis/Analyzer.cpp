@@ -332,7 +332,7 @@ int Analyzer::getVolumeFromDroplets()
 
 double Analyzer::getVolumeFromDroplet(cv::RotatedRect _droplet, double _calib)
 {
-    // The shape of the droplet is approximated as an elongated rotational ellipsoid V=(4/3)*pi*a^2*c#
+    // The shape of the droplet is approximated as an elongated rotational ellipsoid V=(4/3)*pi*a^2*c
 
     double c = std::max(_droplet.size.width, _droplet.size.height) / 2.0;
     double a = std::min(_droplet.size.width, _droplet.size.height) / 2.0;

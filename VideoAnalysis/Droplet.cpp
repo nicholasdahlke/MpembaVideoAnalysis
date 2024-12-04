@@ -25,3 +25,4 @@ cv::RotatedRect Droplet::getEllipse()
 {
     return ellipse;
 }
+
