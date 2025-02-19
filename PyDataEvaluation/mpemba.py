@@ -141,8 +141,8 @@ class Experiment:
             return None
         match file_key:
             case "droplet_volumes":
-                #return scipy.stats.mode(self._contentdict["droplet_volumes"])[0]
                 return np.median(self._contentdict["droplet_volumes"])
+                #return 1.2935e-10
 
             case "droplet_count":
                 return self._contentdict["droplet_count"][0]
@@ -256,7 +256,6 @@ class SupercoolingCorrector:
 
     def get_supercooling_time(self):
         return self._get_cooler_exit_time() - self._get_cutoff_time()
-
     def get_supercooling_error(self):
         return self._get_cutoff_time() - self._get_temp_reached_time()
 
